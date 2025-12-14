@@ -335,17 +335,38 @@ app.post("/sales", async (req, res) => {
 });
 
 // ----------------------------------------------------------
-// FIREBASE NOTIFICATION
+// FIREBASE NOTIFICATION (PER USER)
 // ----------------------------------------------------------
 app.post("/send-notification", async (req, res) => {
   try {
-    const { token, title, body } = req.body;
-    const r = await admin.messaging().send({
-      token,
-      notification: { title, body }
+    const { userId, title, body } = req.body;
+
+    const r = await pool.query(
+      `SELECT token FROM tblfcm_tokens WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (r.rows.length === 0) {
+      return res.json({ message: "No devices registered" });
+    }
+
+    const messages = r.rows.map(row => ({
+      token: row.token,
+      notification: {
+        title: title || "Karni Fashions",
+        body: body || "Notification"
+      }
+    }));
+
+    const response = await admin.messaging().sendEach(messages);
+
+    res.json({
+      success: true,
+      sent: response.successCount,
+      failed: response.failureCount
     });
-    res.json({ success: true, r });
   } catch (e) {
+    console.error("FCM SEND ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
