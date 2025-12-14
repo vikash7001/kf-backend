@@ -149,6 +149,25 @@ app.get("/products", async (_, res) => {
 
   res.json(r.rows);
 });
+// ----------------------------------------------------------
+// CUSTOMERS (FOR SALES LOOKUP)
+// ----------------------------------------------------------
+app.get("/customers", async (_, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        CustomerID AS "CustomerID",
+        CustomerName AS "CustomerName"
+      FROM tblCustomers
+      WHERE IsActive = true
+      ORDER BY CustomerName
+    `);
+    res.json(r.rows);
+  } catch (err) {
+    console.error("CUSTOMERS API ERROR:", err);
+    res.status(500).json({ error: "Failed to load customers" });
+  }
+});
 
 // ----------------------------------------------------------
 // SERIES & CATEGORIES
