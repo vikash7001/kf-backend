@@ -138,10 +138,15 @@ app.post("/fcm/save", async (req, res) => {
 // ----------------------------------------------------------
 app.get("/products", async (_, res) => {
   const r = await pool.query(`
-    SELECT ProductID, Item, SeriesName, CategoryName
-    FROM tblProduct
-    ORDER BY Item
+    SELECT
+      productid   AS "ProductID",
+      item        AS "Item",
+      seriesname  AS "SeriesName",
+      categoryname AS "CategoryName"
+    FROM tblproduct
+    ORDER BY item
   `);
+
   res.json(r.rows);
 });
 
