@@ -22,7 +22,12 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 // ----------------------------------------------------------
 // MIDDLEWARE
 // ----------------------------------------------------------
-app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(express.json());
 
 // ----------------------------------------------------------
