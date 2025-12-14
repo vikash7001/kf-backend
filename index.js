@@ -191,23 +191,52 @@ app.get("/images/list", async (_, res) => {
 // ----------------------------------------------------------
 // STOCK
 // ----------------------------------------------------------
+// ----------------------------------------------------------
+// STOCK (FINAL, FIXED)
+// ----------------------------------------------------------
 app.post("/stock", async (req, res) => {
-  const { role, customerType } = req.body;
-  const r = await pool.query(`SELECT * FROM vwStockSummary`);
-  let stock = r.rows;
+  try {
+    const { role, customerType } = req.body;
 
-  if (role === "Customer" && customerType == 1) return res.json([]);
+    const r = await pool.query(`
+      SELECT
+        productid    AS "ProductID",
+        item         AS "Item",
+        seriesname   AS "SeriesName",
+        categoryname AS "CategoryName",
+        jaipurqty    AS "JaipurQty",
+        kolkataqty   AS "KolkataQty",
+        totalqty     AS "TotalQty"
+      FROM vwStockSummary
+      ORDER BY item
+    `);
 
-  if (role === "Customer" && customerType == 2) {
-    stock = stock.map(s => ({
-      ProductID: s.productid,
-      Item: s.item,
-      SeriesName: s.seriesname,
-      CategoryName: s.categoryname,
-      Availability: s.totalqty > 5 ? "Available" : ""
-    }));
+    let stock = r.rows;
+
+    // ❌ Retail customer → no stock
+    if (role === "Customer" && customerType == 1) {
+      return res.json([]);
+    }
+
+    // 👁️ Wholesale customer → availability only
+    if (role === "Customer" && customerType == 2) {
+      stock = stock.map(s => ({
+        ProductID: s.ProductID,
+        Item: s.Item,
+        SeriesName: s.SeriesName,
+        CategoryName: s.CategoryName,
+        Availability: Number(s.TotalQty) > 5 ? "Available" : ""
+      }));
+      return res.json(stock);
+    }
+
+    // ✅ Admin → full stock
+    res.json(stock);
+
+  } catch (err) {
+    console.error("STOCK API ERROR:", err);
+    res.status(500).json({ error: "Failed to load stock" });
   }
-  res.json(stock);
 });
 
 // ----------------------------------------------------------
