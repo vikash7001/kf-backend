@@ -92,6 +92,35 @@ app.post("/signup", async (req, res) => {
     res.status(500).json({ error: "Signup failed" });
   }
 });
+// ----------------------------------------------------------
+// FCM TOKEN SAVE
+// ----------------------------------------------------------
+app.post("/fcm/save", async (req, res) => {
+  try {
+    const { userId, token } = req.body;
+
+    if (!userId || !token) {
+      return res.status(400).json({ error: "userId and token required" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO tblfcm_tokens (user_id, token)
+      VALUES ($1, $2)
+      ON CONFLICT (token)
+      DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        last_seen = now();
+      `,
+      [userId, token]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("FCM SAVE ERROR:", e);
+    res.status(500).json({ error: "Failed to save FCM token" });
+  }
+});
 
 // ----------------------------------------------------------
 // PRODUCTS
