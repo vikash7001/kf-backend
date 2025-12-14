@@ -22,11 +22,17 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 // ----------------------------------------------------------
 // MIDDLEWARE
 // ----------------------------------------------------------
+// ----------------------------------------------------------
+// MIDDLEWARE
+// ----------------------------------------------------------
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
+// 🔴 THIS LINE IS REQUIRED ON RENDER
+app.options("*", cors());
 
 app.use(express.json());
 
