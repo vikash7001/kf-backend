@@ -291,7 +291,7 @@ app.post("/incoming", async (req, res) => {
   r.CategoryName,
   r.Quantity
 ]);
-
+  }
 
     await client.query("COMMIT");
     res.json({ success: true });
