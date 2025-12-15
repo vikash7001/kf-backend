@@ -277,6 +277,19 @@ app.post("/incoming", async (req, res) => {
         (incomingheaderid, productid, item, seriesname, categoryname, quantity)
         VALUES ($1,$2,$3,$4,$5,$6)
       `, [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]);
+await client.query(`
+  INSERT INTO tblstockledger
+  (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
+  VALUES ('Incoming', $1, $2, $3, $4, $5, $6, $7)
+`, [
+  headerId,
+  r.Item,
+  r.SeriesName,
+  r.CategoryName,
+  r.Quantity,
+  Location,
+  UserName
+]);
 
       await client.query(`
   INSERT INTO tblstock
