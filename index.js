@@ -279,12 +279,19 @@ app.post("/incoming", async (req, res) => {
       `, [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]);
 
       await client.query(`
-        INSERT INTO tblstock (productid, totalquantity)
-        VALUES ($1,$2)
-        ON CONFLICT (productid)
-        DO UPDATE SET totalquantity = tblstock.totalquantity + EXCLUDED.totalquantity
-      `, [productId, r.Quantity]);
-    }
+  INSERT INTO tblstock
+  (productid, item, seriesname, categoryname, totalquantity)
+  VALUES ($1,$2,$3,$4,$5)
+  ON CONFLICT (productid)
+  DO UPDATE SET totalquantity = tblstock.totalquantity + EXCLUDED.totalquantity
+`, [
+  productId,
+  r.Item,
+  r.SeriesName,
+  r.CategoryName,
+  r.Quantity
+]);
+
 
     await client.query("COMMIT");
     res.json({ success: true });
