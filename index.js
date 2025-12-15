@@ -158,6 +158,7 @@ app.get("/customers", async (_, res) => {
       FROM tblcustomers
       ORDER BY customername
     `);
+
     res.json(r.rows);
   } catch (err) {
     console.error("CUSTOMERS API ERROR:", err.message);
