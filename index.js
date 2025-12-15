@@ -204,6 +204,123 @@ app.post("/images/save", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+app.get("/image/:productId", async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const r = await pool.query(`
+      SELECT
+        i.productid   AS "ProductID",
+        i.imageurl    AS "ImageURL"
+      FROM tblitemimages i
+      JOIN vwstocksummary s ON s.productid = i.productid
+      WHERE i.productid = $1
+        AND (s.jaipurqty > 5 OR s.kolkataqty > 5)
+    `, [productId]);
+
+    if (r.rows.length === 0)
+      return res.json({});
+
+    res.json(r.rows[0]);
+  } catch (e) {
+    console.error("IMAGE FETCH ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.get("/images/series/:series", async (req, res) => {
+  try {
+    const { series } = req.params;
+
+    const r = await pool.query(`
+      SELECT
+        i.productid AS "ProductID",
+        i.imageurl  AS "ImageURL"
+      FROM tblitemimages i
+      JOIN tblproduct p ON p.productid = i.productid
+      JOIN vwstocksummary s ON s.productid = p.productid
+      WHERE p.seriesname = $1
+        AND (s.jaipurqty > 5 OR s.kolkataqty > 5)
+      ORDER BY p.item
+    `, [series]);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("SERIES IMAGE ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.get("/images/category/:category", async (req, res) => {
+  try {
+    const { category } = req.params;
+
+    const r = await pool.query(`
+      SELECT
+        i.productid AS "ProductID",
+        i.imageurl  AS "ImageURL"
+      FROM tblitemimages i
+      JOIN tblproduct p ON p.productid = i.productid
+      JOIN vwstocksummary s ON s.productid = p.productid
+      WHERE p.categoryname = $1
+        AND (s.jaipurqty > 5 OR s.kolkataqty > 5)
+      ORDER BY p.item
+    `, [category]);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("CATEGORY IMAGE ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/images/series/list", async (req, res) => {
+  try {
+    const seriesList = req.body;
+
+    if (!Array.isArray(seriesList) || seriesList.length === 0)
+      return res.json([]);
+
+    const r = await pool.query(`
+      SELECT
+        i.productid AS "ProductID",
+        i.imageurl  AS "ImageURL"
+      FROM tblitemimages i
+      JOIN tblproduct p ON p.productid = i.productid
+      JOIN vwstocksummary s ON s.productid = p.productid
+      WHERE p.seriesname = ANY($1)
+        AND (s.jaipurqty > 5 OR s.kolkataqty > 5)
+      ORDER BY p.item
+    `, [seriesList]);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("MULTI-SERIES IMAGE ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/images/category/list", async (req, res) => {
+  try {
+    const categoryList = req.body;
+
+    if (!Array.isArray(categoryList) || categoryList.length === 0)
+      return res.json([]);
+
+    const r = await pool.query(`
+      SELECT
+        i.productid AS "ProductID",
+        i.imageurl  AS "ImageURL"
+      FROM tblitemimages i
+      JOIN tblproduct p ON p.productid = i.productid
+      JOIN vwstocksummary s ON s.productid = p.productid
+      WHERE p.categoryname = ANY($1)
+        AND (s.jaipurqty > 5 OR s.kolkataqty > 5)
+      ORDER BY p.item
+    `, [categoryList]);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("MULTI-CATEGORY IMAGE ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // STOCK  ❌ UNCHANGED
