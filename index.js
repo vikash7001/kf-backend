@@ -27,7 +27,6 @@ app.use(cors({
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-
 app.options("*", cors());
 app.use(express.json());
 
@@ -57,7 +56,6 @@ app.post("/login", async (req, res) => {
 
     const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
     res.json({ success: true, token, user: r.rows[0] });
-
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -80,10 +78,42 @@ app.get("/products", async (_, res) => {
 });
 
 // ----------------------------------------------------------
+// SERIES (RESTORED)
+// ----------------------------------------------------------
+app.get("/series", async (_, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT seriesname AS "SeriesName"
+      FROM tblseries
+      WHERE isactive = true
+      ORDER BY seriesname
+    `);
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ----------------------------------------------------------
+// CATEGORIES (RESTORED)
+// ----------------------------------------------------------
+app.get("/categories", async (_, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT categoryname AS "CategoryName"
+      FROM tblcategory
+      WHERE isactive = true
+      ORDER BY categoryname
+    `);
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ----------------------------------------------------------
 // IMAGES (MANAGE IMAGE PAGE)
 // ----------------------------------------------------------
-
-// 👉 SHOW ITEMS + IMAGES
 app.get("/images/list", async (_, res) => {
   const r = await pool.query(`
     SELECT
@@ -97,7 +127,45 @@ app.get("/images/list", async (_, res) => {
   res.json(r.rows);
 });
 
-// 👉 SAVE / UPDATE IMAGE (ADMIN MANAGE PAGE)
+// ----------------------------------------------------------
+// IMAGE SAVE (OLD – ITEM BASED)  ✅ RESTORED
+// ----------------------------------------------------------
+app.post("/image/save", async (req, res) => {
+  try {
+    const { Item, ImageURL } = req.body;
+
+    if (!Item || !ImageURL) {
+      return res.status(400).json({ error: "Item and ImageURL required" });
+    }
+
+    const p = await pool.query(
+      `SELECT productid FROM tblproduct WHERE item = $1`,
+      [Item]
+    );
+
+    if (p.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO tblitemimages (productid, imageurl)
+      VALUES ($1,$2)
+      ON CONFLICT (productid)
+      DO UPDATE SET imageurl = EXCLUDED.imageurl
+      `,
+      [p.rows[0].productid, ImageURL]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ----------------------------------------------------------
+// IMAGE SAVE (NEW – PRODUCTID BASED, MANAGE IMAGES)
+// ----------------------------------------------------------
 app.post("/images/save", async (req, res) => {
   try {
     const { ProductID, ImageURL } = req.body;
@@ -114,7 +182,6 @@ app.post("/images/save", async (req, res) => {
     `, [ProductID, ImageURL]);
 
     res.json({ success: true });
-
   } catch (err) {
     console.error("IMAGE SAVE ERROR:", err.message);
     res.status(500).json({ error: err.message });
@@ -154,14 +221,13 @@ app.post("/stock", async (req, res) => {
     }
 
     res.json(r.rows);
-
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 // ----------------------------------------------------------
-// INCOMING (PURCHASE) ❌ UNCHANGED
+// INCOMING (PURCHASE)  ❌ UNCHANGED
 // ----------------------------------------------------------
 app.post("/incoming", async (req, res) => {
   const client = await pool.connect();
@@ -205,7 +271,6 @@ app.post("/incoming", async (req, res) => {
 
     await client.query("COMMIT");
     res.json({ success: true });
-
   } catch (e) {
     await client.query("ROLLBACK");
     res.status(500).json({ error: e.message });
@@ -215,7 +280,7 @@ app.post("/incoming", async (req, res) => {
 });
 
 // ----------------------------------------------------------
-// SALES ❌ UNCHANGED
+// SALES  ❌ UNCHANGED
 // ----------------------------------------------------------
 app.post("/sales", async (req, res) => {
   const client = await pool.connect();
@@ -246,14 +311,14 @@ app.post("/sales", async (req, res) => {
       `, [salesId, productId, r.Item, r.Quantity, r.SeriesName, r.CategoryName]);
 
       await client.query(`
-        UPDATE tblstock SET totalquantity = totalquantity - $1
+        UPDATE tblstock
+        SET totalquantity = totalquantity - $1
         WHERE productid=$2
       `, [r.Quantity, productId]);
     }
 
     await client.query("COMMIT");
     res.json({ success: true });
-
   } catch (e) {
     await client.query("ROLLBACK");
     res.status(500).json({ error: e.message });
