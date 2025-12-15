@@ -4,20 +4,9 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const admin = require("firebase-admin");
 const { pool } = require("./db");
 
 const app = express();
-
-// ----------------------------------------------------------
-// FIREBASE
-// ----------------------------------------------------------
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
 
 // ----------------------------------------------------------
 // MIDDLEWARE
@@ -45,17 +34,22 @@ app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const r = await pool.query(`
+    const r = await pool.query(
+      `
       SELECT userid, username, fullname, role, customertype
       FROM tblusers
       WHERE username=$1 AND passwordhash=$2
-    `, [username, password]);
+      `,
+      [username, password]
+    );
 
     if (r.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
+    const token = Buffer
+      .from(`${username}:${Date.now()}`)
+      .toString("base64");
 
     res.json({ success: true, token, user: r.rows[0] });
   } catch (e) {
@@ -69,9 +63,9 @@ app.post("/login", async (req, res) => {
 app.get("/products", async (_, res) => {
   const r = await pool.query(`
     SELECT
-      productid AS "ProductID",
-      item AS "Item",
-      seriesname AS "SeriesName",
+      productid   AS "ProductID",
+      item        AS "Item",
+      seriesname  AS "SeriesName",
       categoryname AS "CategoryName"
     FROM tblproduct
     ORDER BY item
@@ -86,7 +80,7 @@ app.get("/customers", async (_, res) => {
   try {
     const r = await pool.query(`
       SELECT
-        customerid AS "CustomerID",
+        customerid   AS "CustomerID",
         customername AS "CustomerName"
       FROM tblcustomer
       WHERE isactive = true
@@ -102,12 +96,20 @@ app.get("/customers", async (_, res) => {
 // SERIES & CATEGORIES
 // ----------------------------------------------------------
 app.get("/series", async (_, res) => {
-  const r = await pool.query(`SELECT seriesname AS "SeriesName" FROM tblseries WHERE isactive=true`);
+  const r = await pool.query(`
+    SELECT seriesname AS "SeriesName"
+    FROM tblseries
+    WHERE isactive = true
+  `);
   res.json(r.rows);
 });
 
 app.get("/categories", async (_, res) => {
-  const r = await pool.query(`SELECT categoryname AS "CategoryName" FROM tblcategory WHERE isactive=true`);
+  const r = await pool.query(`
+    SELECT categoryname AS "CategoryName"
+    FROM tblcategory
+    WHERE isactive = true
+  `);
   res.json(r.rows);
 });
 
@@ -118,7 +120,7 @@ app.get("/images/list", async (_, res) => {
   const r = await pool.query(`
     SELECT
       P.productid AS "ProductID",
-      P.item AS "Item",
+      P.item      AS "Item",
       COALESCE(I.imageurl,'') AS "ImageURL"
     FROM tblproduct P
     LEFT JOIN tblitemimages I ON I.productid = P.productid
@@ -134,24 +136,15 @@ app.post("/image/save", async (req, res) => {
       return res.status(400).json({ error: "Item and ImageURL required" });
     }
 
-    // convert Google Drive share link -> thumbnail/view
-    function convertDrive(url) {
-      try {
-        const m = url.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
-        if (m && m[1]) {
-          return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
-        }
-        return url;
-      } catch {
-        return url;
-      }
-    }
+    const convertDrive = (url) => {
+      const m = url.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+      return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000` : url;
+    };
 
     const finalUrl = convertDrive(ImageURL);
 
-    // 🔑 Resolve ProductID from Item
     const p = await pool.query(
-      `SELECT ProductID FROM tblProduct WHERE Item = $1`,
+      `SELECT productid FROM tblproduct WHERE item=$1`,
       [Item]
     );
 
@@ -159,28 +152,24 @@ app.post("/image/save", async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    const productId = p.rows[0].productid;
-
     await pool.query(
       `
-      INSERT INTO tblItemImages (ProductID, ImageURL)
-      VALUES ($1, $2)
-      ON CONFLICT (ProductID)
-      DO UPDATE SET ImageURL = EXCLUDED.ImageURL
+      INSERT INTO tblitemimages (productid, imageurl)
+      VALUES ($1,$2)
+      ON CONFLICT (productid)
+      DO UPDATE SET imageurl = EXCLUDED.imageurl
       `,
-      [productId, finalUrl]
+      [p.rows[0].productid, finalUrl]
     );
 
     res.json({ success: true });
-
-  } catch (err) {
-    console.error("IMAGE SAVE ERROR:", err.message);
-    res.status(500).json({ error: err.message });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
 // ----------------------------------------------------------
-// STOCK (FINAL)
+// STOCK
 // ----------------------------------------------------------
 app.post("/stock", async (req, res) => {
   try {
@@ -189,62 +178,34 @@ app.post("/stock", async (req, res) => {
 
     const r = await pool.query(`
       SELECT
-        productid AS "ProductID",
-        item AS "Item",
-        seriesname AS "SeriesName",
+        productid   AS "ProductID",
+        item        AS "Item",
+        seriesname  AS "SeriesName",
         categoryname AS "CategoryName",
-        jaipurqty AS "JaipurQty",
-        kolkataqty AS "KolkataQty",
-        totalqty AS "TotalQty"
+        jaipurqty   AS "JaipurQty",
+        kolkataqty  AS "KolkataQty",
+        totalqty    AS "TotalQty"
       FROM vwstocksummary
       ORDER BY item
     `);
 
-    let stock = r.rows;
-
     if (role === "Customer" && ct === 1) return res.json([]);
 
     if (role === "Customer" && ct === 2) {
-      return res.json(stock.map(s => ({
-        ProductID: s.ProductID,
-        Item: s.Item,
-        SeriesName: s.SeriesName,
-        CategoryName: s.CategoryName,
-        Availability: Number(s.TotalQty) > 5 ? "Available" : ""
-      })));
+      return res.json(
+        r.rows.map(s => ({
+          ProductID: s.ProductID,
+          Item: s.Item,
+          SeriesName: s.SeriesName,
+          CategoryName: s.CategoryName,
+          Availability: Number(s.TotalQty) > 5 ? "Available" : ""
+        }))
+      );
     }
 
-    res.json(stock);
+    res.json(r.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-// ----------------------------------------------------------
-// IMAGE SAVE / UPDATE
-// ----------------------------------------------------------
-app.post("/image/save", async (req, res) => {
-  try {
-    const { ProductID, ImageURL } = req.body;
-
-    if (!ProductID || !ImageURL) {
-      return res.status(400).json({ error: "ProductID and ImageURL required" });
-    }
-
-    await pool.query(
-      `
-      INSERT INTO tblItemImages (ProductID, ImageURL)
-      VALUES ($1, $2)
-      ON CONFLICT (ProductID)
-      DO UPDATE SET ImageURL = EXCLUDED.ImageURL
-      `,
-      [ProductID, ImageURL]
-    );
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error("IMAGE SAVE ERROR:", err.message);
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -257,38 +218,53 @@ app.post("/incoming", async (req, res) => {
     const { UserName, Location, Rows } = req.body;
     await client.query("BEGIN");
 
-    const h = await client.query(`
+    const h = await client.query(
+      `
       INSERT INTO tblincomingheader (username, location)
-      VALUES ($1,$2) RETURNING incomingheaderid
-    `, [UserName, Location]);
-
-    const headerId = h.rows[0].incomingheaderid;
+      VALUES ($1,$2)
+      RETURNING incomingheaderid
+      `,
+      [UserName, Location]
+    );
 
     for (const r of Rows) {
-      const p = await client.query(`
+      const p = await client.query(
+        `
         SELECT productid FROM tblproduct
         WHERE item=$1 AND seriesname=$2 AND categoryname=$3
-      `, [r.Item, r.SeriesName, r.CategoryName]);
+        `,
+        [r.Item, r.SeriesName, r.CategoryName]
+      );
 
       const productId = p.rows.length
         ? p.rows[0].productid
-        : (await client.query(`
+        : (await client.query(
+            `
             INSERT INTO tblproduct (item, seriesname, categoryname)
-            VALUES ($1,$2,$3) RETURNING productid
-          `, [r.Item, r.SeriesName, r.CategoryName])).rows[0].productid;
+            VALUES ($1,$2,$3)
+            RETURNING productid
+            `,
+            [r.Item, r.SeriesName, r.CategoryName]
+          )).rows[0].productid;
 
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO tblincomingdetails
         (incomingheaderid, productid, item, seriesname, categoryname, quantity)
         VALUES ($1,$2,$3,$4,$5,$6)
-      `, [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]);
+        `,
+        [h.rows[0].incomingheaderid, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]
+      );
 
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO tblstock (productid, totalquantity)
         VALUES ($1,$2)
         ON CONFLICT (productid)
         DO UPDATE SET totalquantity = tblstock.totalquantity + EXCLUDED.totalquantity
-      `, [productId, r.Quantity]);
+        `,
+        [productId, r.Quantity]
+      );
     }
 
     await client.query("COMMIT");
@@ -310,36 +286,44 @@ app.post("/sales", async (req, res) => {
     const { UserName, Location, Customer, VoucherNo, Rows } = req.body;
     await client.query("BEGIN");
 
-    const h = await client.query(`
+    const h = await client.query(
+      `
       INSERT INTO tblsalesheader
       (username, locationname, customer, voucherno)
-      VALUES ($1,$2,$3,$4) RETURNING salesid
-    `, [UserName, Location, Customer, VoucherNo]);
-
-    const salesId = h.rows[0].salesid;
+      VALUES ($1,$2,$3,$4)
+      RETURNING salesid
+      `,
+      [UserName, Location, Customer, VoucherNo]
+    );
 
     for (const r of Rows) {
-      const p = await client.query(`
+      const p = await client.query(
+        `
         SELECT productid FROM tblproduct
         WHERE item=$1 AND seriesname=$2 AND categoryname=$3
-      `, [r.Item, r.SeriesName, r.CategoryName]);
+        `,
+        [r.Item, r.SeriesName, r.CategoryName]
+      );
 
-      if (p.rows.length === 0) {
-        throw new Error("Product not found");
-      }
+      if (!p.rows.length) throw new Error("Product not found");
 
-      const productId = p.rows[0].productid;
-
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO tblsalesdetails
         (salesid, productid, item, quantity, series, category)
         VALUES ($1,$2,$3,$4,$5,$6)
-      `, [salesId, productId, r.Item, r.Quantity, r.SeriesName, r.CategoryName]);
+        `,
+        [h.rows[0].salesid, p.rows[0].productid, r.Item, r.Quantity, r.SeriesName, r.CategoryName]
+      );
 
-      await client.query(`
-        UPDATE tblstock SET totalquantity = totalquantity - $1
-        WHERE productid=$2
-      `, [r.Quantity, productId]);
+      await client.query(
+        `
+        UPDATE tblstock
+        SET totalquantity = totalquantity - $1
+        WHERE productid = $2
+        `,
+        [r.Quantity, p.rows[0].productid]
+      );
     }
 
     await client.query("COMMIT");
@@ -356,4 +340,6 @@ app.post("/sales", async (req, res) => {
 // START
 // ----------------------------------------------------------
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Karni API running on ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Karni API running on ${PORT}`)
+);
