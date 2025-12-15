@@ -493,6 +493,36 @@ await client.query(`
     client.release();
   }
 });
+app.get("/series/active-with-stock", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT DISTINCT seriesname AS "SeriesName"
+      FROM vwstocksummary
+      WHERE (jaipurqty > 5 OR kolkataqty > 5)
+      ORDER BY seriesname
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("SERIES STOCK ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.get("/categories/active-with-stock", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT DISTINCT categoryname AS "CategoryName"
+      FROM vwstocksummary
+      WHERE (jaipurqty > 5 OR kolkataqty > 5)
+      ORDER BY categoryname
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("CATEGORY STOCK ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // START
