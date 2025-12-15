@@ -94,6 +94,23 @@ app.get("/series", async (_, res) => {
   }
 });
 
+app.get("/customers", async (_, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        customerid   AS "CustomerID",
+        customername AS "CustomerName"
+      FROM tblcustomer
+      ORDER BY customername
+    `);
+
+    res.json(r.rows);
+  } catch (err) {
+    console.error("CUSTOMERS API ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ----------------------------------------------------------
 // CATEGORIES (RESTORED)
 // ----------------------------------------------------------
