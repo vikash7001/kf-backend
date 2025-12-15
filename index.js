@@ -185,7 +185,7 @@ app.post("/stock", async (req, res) => {
   }
 });
 // ----------------------------------------------------------
-// SAVE / UPDATE IMAGE URL
+// IMAGE SAVE / UPDATE
 // ----------------------------------------------------------
 app.post("/image/save", async (req, res) => {
   try {
@@ -195,12 +195,15 @@ app.post("/image/save", async (req, res) => {
       return res.status(400).json({ error: "ProductID and ImageURL required" });
     }
 
-    await pool.query(`
+    await pool.query(
+      `
       INSERT INTO tblItemImages (ProductID, ImageURL)
       VALUES ($1, $2)
       ON CONFLICT (ProductID)
       DO UPDATE SET ImageURL = EXCLUDED.ImageURL
-    `, [ProductID, ImageURL]);
+      `,
+      [ProductID, ImageURL]
+    );
 
     res.json({ success: true });
 
