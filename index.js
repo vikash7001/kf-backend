@@ -184,6 +184,31 @@ app.post("/stock", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// SAVE / UPDATE IMAGE URL
+// ----------------------------------------------------------
+app.post("/image/save", async (req, res) => {
+  try {
+    const { ProductID, ImageURL } = req.body;
+
+    if (!ProductID || !ImageURL) {
+      return res.status(400).json({ error: "ProductID and ImageURL required" });
+    }
+
+    await pool.query(`
+      INSERT INTO tblItemImages (ProductID, ImageURL)
+      VALUES ($1, $2)
+      ON CONFLICT (ProductID)
+      DO UPDATE SET ImageURL = EXCLUDED.ImageURL
+    `, [ProductID, ImageURL]);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("IMAGE SAVE ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ----------------------------------------------------------
 // INCOMING
