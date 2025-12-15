@@ -127,20 +127,55 @@ app.get("/images/list", async (_, res) => {
   res.json(r.rows);
 });
 
-app.post("/images/save", async (req, res) => {
+app.post("/image/save", async (req, res) => {
   try {
-    const { ProductID, ImageURL } = req.body;
+    const { Item, ImageURL } = req.body;
+    if (!Item || !ImageURL) {
+      return res.status(400).json({ error: "Item and ImageURL required" });
+    }
 
-    await pool.query(`
-      INSERT INTO tblitemimages (productid, imageurl)
-      VALUES ($1,$2)
-      ON CONFLICT (productid)
-      DO UPDATE SET imageurl = EXCLUDED.imageurl
-    `, [ProductID, ImageURL]);
+    // convert Google Drive share link -> thumbnail/view
+    function convertDrive(url) {
+      try {
+        const m = url.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+        if (m && m[1]) {
+          return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
+        }
+        return url;
+      } catch {
+        return url;
+      }
+    }
+
+    const finalUrl = convertDrive(ImageURL);
+
+    // 🔑 Resolve ProductID from Item
+    const p = await pool.query(
+      `SELECT ProductID FROM tblProduct WHERE Item = $1`,
+      [Item]
+    );
+
+    if (p.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const productId = p.rows[0].productid;
+
+    await pool.query(
+      `
+      INSERT INTO tblItemImages (ProductID, ImageURL)
+      VALUES ($1, $2)
+      ON CONFLICT (ProductID)
+      DO UPDATE SET ImageURL = EXCLUDED.ImageURL
+      `,
+      [productId, finalUrl]
+    );
 
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+
+  } catch (err) {
+    console.error("IMAGE SAVE ERROR:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
