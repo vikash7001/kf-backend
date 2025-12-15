@@ -155,7 +155,7 @@ app.get("/customers", async (_, res) => {
       SELECT
         customerid   AS "CustomerID",
         customername AS "CustomerName"
-      FROM tblcustomers
+      FROM tblcustomer
       ORDER BY customername
     `);
 
