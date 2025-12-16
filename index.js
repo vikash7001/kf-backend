@@ -36,6 +36,9 @@ app.use(express.json());
 app.get("/", (_, res) => {
   res.send("Karni Fashions API (PostgreSQL) is live");
 });
+app.get("/health", (req, res) => {
+  res.status(200).send("ok");
+});
 
 // ----------------------------------------------------------
 // LOGIN
