@@ -526,6 +526,39 @@ app.get("/categories/active-with-stock", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// TEST NOTIFICATION (TEMPORARY)
+// ----------------------------------------------------------
+app.get("/test-notification", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT token FROM tblfcm_tokens"
+    );
+
+    const tokens = rows.map(r => r.token);
+
+    if (!tokens.length) {
+      return res.status(200).json({ message: "No tokens found" });
+    }
+
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: "KF Test Notification",
+        body: "Firebase is connected successfully 🚀"
+      }
+    });
+
+    res.json({
+      success: true,
+      sent: response.successCount,
+      failed: response.failureCount
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ----------------------------------------------------------
 // START
