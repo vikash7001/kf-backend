@@ -1,3 +1,5 @@
+const { logActivity } = require('./activityLogger');
+
 // ----------------------------------------------------------
 // KARNI FASHIONS BACKEND — PostgreSQL (Supabase)
 // ----------------------------------------------------------
