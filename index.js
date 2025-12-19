@@ -464,6 +464,13 @@ await client.query(`
   }
 
     await client.query("COMMIT");
+    await logActivity({
+  userId: req.user.userid,      // or however you attach logged-in user
+  username: req.user.username,
+  actionType: 'INCOMING',
+  description: 'Incoming entry created'
+});
+
     res.json({ success: true });
   } catch (e) {
     await client.query("ROLLBACK");
@@ -471,6 +478,7 @@ await client.query(`
   } finally {
     client.release();
   }
+  
 });
 
 // ----------------------------------------------------------
@@ -525,6 +533,13 @@ await client.query(`
     }
 
     await client.query("COMMIT");
+    await logActivity({
+  userId: req.user.userid,
+  username: req.user.username,
+  actionType: 'SALES',
+  description: 'Sales entry created'
+});
+
     res.json({ success: true });
   } catch (e) {
     await client.query("ROLLBACK");
