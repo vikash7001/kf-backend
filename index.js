@@ -58,6 +58,14 @@ app.post("/login", async (req, res) => {
     if (r.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
+const user = r.rows[0];
+
+await logActivity({
+  userId: user.userid,
+  username: user.username,
+  actionType: 'LOGIN',
+  description: `User ${user.username} logged in`
+});
 
     const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
     res.json({ success: true, token, user: r.rows[0] });
