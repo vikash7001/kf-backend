@@ -405,81 +405,132 @@ app.post("/stock", async (req, res) => {
 // ----------------------------------------------------------
 app.post("/incoming", async (req, res) => {
   const client = await pool.connect();
+
   try {
     const { UserName, Location, Rows } = req.body;
+
+    if (!UserName || !Location || !Array.isArray(Rows)) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
     await client.query("BEGIN");
 
-    const h = await client.query(`
+    // 1️⃣ Resolve userid from username (SOURCE OF TRUTH)
+    const u = await client.query(
+      `SELECT userid FROM tblusers WHERE username = $1`,
+      [UserName]
+    );
+
+    if (u.rows.length === 0) {
+      throw new Error("Invalid user");
+    }
+
+    const userId = u.rows[0].userid;
+
+    // 2️⃣ Insert Incoming Header
+    const h = await client.query(
+      `
       INSERT INTO tblincomingheader (username, location)
-      VALUES ($1,$2) RETURNING incomingheaderid
-    `, [UserName, Location]);
+      VALUES ($1, $2)
+      RETURNING incomingheaderid
+      `,
+      [UserName, Location]
+    );
 
     const headerId = h.rows[0].incomingheaderid;
 
+    // 3️⃣ Process Incoming Rows
     for (const r of Rows) {
-      const p = await client.query(`
-        SELECT productid FROM tblproduct
+
+      const p = await client.query(
+        `
+        SELECT productid
+        FROM tblproduct
         WHERE item=$1 AND seriesname=$2 AND categoryname=$3
-      `, [r.Item, r.SeriesName, r.CategoryName]);
+        `,
+        [r.Item, r.SeriesName, r.CategoryName]
+      );
 
       const productId = p.rows.length
         ? p.rows[0].productid
-        : (await client.query(`
-            INSERT INTO tblproduct (item, seriesname, categoryname)
-            VALUES ($1,$2,$3) RETURNING productid
-          `, [r.Item, r.SeriesName, r.CategoryName])).rows[0].productid;
+        : (
+            await client.query(
+              `
+              INSERT INTO tblproduct (item, seriesname, categoryname)
+              VALUES ($1,$2,$3)
+              RETURNING productid
+              `,
+              [r.Item, r.SeriesName, r.CategoryName]
+            )
+          ).rows[0].productid;
 
-      await client.query(`
+      // Incoming details
+      await client.query(
+        `
         INSERT INTO tblincomingdetails
         (incomingheaderid, productid, item, seriesname, categoryname, quantity)
         VALUES ($1,$2,$3,$4,$5,$6)
-      `, [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]);
-await client.query(`
-  INSERT INTO tblstockledger
-  (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
-  VALUES ('Incoming', $1, $2, $3, $4, $5, $6, $7)
-`, [
-  headerId,
-  r.Item,
-  r.SeriesName,
-  r.CategoryName,
-  r.Quantity,
-  Location,
-  UserName
-]);
+        `,
+        [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]
+      );
 
-      await client.query(`
-  INSERT INTO tblstock
-  (productid, item, seriesname, categoryname, totalquantity)
-  VALUES ($1,$2,$3,$4,$5)
-  ON CONFLICT (productid)
-  DO UPDATE SET totalquantity = tblstock.totalquantity + EXCLUDED.totalquantity
-`, [
-  productId,
-  r.Item,
-  r.SeriesName,
-  r.CategoryName,
-  r.Quantity
-]);
-  }
+      // Stock ledger
+      await client.query(
+        `
+        INSERT INTO tblstockledger
+        (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
+        VALUES ('Incoming', $1, $2, $3, $4, $5, $6, $7)
+        `,
+        [
+          headerId,
+          r.Item,
+          r.SeriesName,
+          r.CategoryName,
+          r.Quantity,
+          Location,
+          UserName
+        ]
+      );
 
+      // Stock update
+      await client.query(
+        `
+        INSERT INTO tblstock
+        (productid, item, seriesname, categoryname, totalquantity)
+        VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (productid)
+        DO UPDATE SET totalquantity = tblstock.totalquantity + EXCLUDED.totalquantity
+        `,
+        [
+          productId,
+          r.Item,
+          r.SeriesName,
+          r.CategoryName,
+          r.Quantity
+        ]
+      );
+    }
+
+    // 4️⃣ COMMIT TRANSACTION
     await client.query("COMMIT");
-    await logActivity({
-    userId: req.body.userid,
-username: req.body.username,
 
-  actionType: 'INCOMING',
-  description: 'Incoming entry created'
-});
+    // 5️⃣ ACTIVITY LOG (AFTER COMMIT, BEFORE RESPONSE)
+    await logActivity({
+      userId: userId,
+      username: UserName,
+      actionType: "INCOMING",
+      description: "Incoming entry created"
+    });
 
     res.json({ success: true });
+
   } catch (e) {
     await client.query("ROLLBACK");
+    console.error("Incoming error:", e);
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
   }
-  
 });
 
 // ----------------------------------------------------------
@@ -487,129 +538,117 @@ username: req.body.username,
 // ----------------------------------------------------------
 app.post("/sales", async (req, res) => {
   const client = await pool.connect();
+
   try {
     const { UserName, Location, Customer, VoucherNo, Rows } = req.body;
+
+    if (!UserName || !Location || !Customer || !VoucherNo || !Array.isArray(Rows)) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
     await client.query("BEGIN");
 
-    const h = await client.query(`
+    // 1️⃣ Resolve userid from username
+    const u = await client.query(
+      `SELECT userid FROM tblusers WHERE username = $1`,
+      [UserName]
+    );
+
+    if (u.rows.length === 0) {
+      throw new Error("Invalid user");
+    }
+
+    const userId = u.rows[0].userid;
+
+    // 2️⃣ Insert Sales Header
+    const h = await client.query(
+      `
       INSERT INTO tblsalesheader
       (username, locationname, customer, voucherno)
-      VALUES ($1,$2,$3,$4) RETURNING salesid
-    `, [UserName, Location, Customer, VoucherNo]);
+      VALUES ($1,$2,$3,$4)
+      RETURNING salesid
+      `,
+      [UserName, Location, Customer, VoucherNo]
+    );
 
     const salesId = h.rows[0].salesid;
 
+    // 3️⃣ Process Sales Rows
     for (const r of Rows) {
-      const p = await client.query(`
-        SELECT productid FROM tblproduct
+
+      const p = await client.query(
+        `
+        SELECT productid
+        FROM tblproduct
         WHERE item=$1 AND seriesname=$2 AND categoryname=$3
-      `, [r.Item, r.SeriesName, r.CategoryName]);
+        `,
+        [r.Item, r.SeriesName, r.CategoryName]
+      );
+
+      if (p.rows.length === 0) {
+        throw new Error(`Product not found: ${r.Item}`);
+      }
 
       const productId = p.rows[0].productid;
 
-      await client.query(`
+      // Sales details
+      await client.query(
+        `
         INSERT INTO tblsalesdetails
         (salesid, productid, item, quantity, series, category)
         VALUES ($1,$2,$3,$4,$5,$6)
-      `, [salesId, productId, r.Item, r.Quantity, r.SeriesName, r.CategoryName]);
-await client.query(`
-  INSERT INTO tblstockledger
-  (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
-  VALUES ('OUT', $1, $2, $3, $4, $5, $6, $7)
-`, [
-  salesId,
-  r.Item,
-  r.SeriesName,
-  r.CategoryName,
-  r.Quantity,
-  Location,
-  UserName
-]);
+        `,
+        [salesId, productId, r.Item, r.Quantity, r.SeriesName, r.CategoryName]
+      );
 
-      await client.query(`
+      // Stock ledger
+      await client.query(
+        `
+        INSERT INTO tblstockledger
+        (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
+        VALUES ('OUT', $1, $2, $3, $4, $5, $6, $7)
+        `,
+        [
+          salesId,
+          r.Item,
+          r.SeriesName,
+          r.CategoryName,
+          r.Quantity,
+          Location,
+          UserName
+        ]
+      );
+
+      // Stock update
+      await client.query(
+        `
         UPDATE tblstock
         SET totalquantity = totalquantity - $1
-        WHERE productid=$2
-      `, [r.Quantity, productId]);
+        WHERE productid = $2
+        `,
+        [r.Quantity, productId]
+      );
     }
 
+    // 4️⃣ COMMIT TRANSACTION
     await client.query("COMMIT");
+
+    // 5️⃣ ACTIVITY LOG
     await logActivity({
-  userId: req.body.userid,
-username: req.body.username,
-  actionType: 'SALES',
-  description: 'Sales entry created'
-});
+      userId: userId,
+      username: UserName,
+      actionType: "SALES",
+      description: "Sales entry created"
+    });
 
     res.json({ success: true });
+
   } catch (e) {
     await client.query("ROLLBACK");
+    console.error("Sales error:", e);
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
-  }
-});
-app.get("/series/active-with-stock", async (req, res) => {
-  try {
-    const r = await pool.query(`
-      SELECT DISTINCT seriesname AS "SeriesName"
-      FROM vwstocksummary
-      WHERE (jaipurqty > 5 OR kolkataqty > 5)
-      ORDER BY seriesname
-    `);
-
-    res.json(r.rows);
-  } catch (e) {
-    console.error("SERIES STOCK ERROR:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-app.get("/categories/active-with-stock", async (req, res) => {
-  try {
-    const r = await pool.query(`
-      SELECT DISTINCT categoryname AS "CategoryName"
-      FROM vwstocksummary
-      WHERE (jaipurqty > 5 OR kolkataqty > 5)
-      ORDER BY categoryname
-    `);
-
-    res.json(r.rows);
-  } catch (e) {
-    console.error("CATEGORY STOCK ERROR:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-// ----------------------------------------------------------
-// TEST NOTIFICATION (TEMPORARY)
-// ----------------------------------------------------------
-app.get("/test-notification", async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      "SELECT token FROM tblfcm_tokens"
-    );
-
-    const tokens = rows.map(r => r.token);
-
-    if (!tokens.length) {
-      return res.status(200).json({ message: "No tokens found" });
-    }
-
-    const response = await admin.messaging().sendEachForMulticast({
-      tokens,
-      notification: {
-        title: "KF Test Notification",
-        body: "Firebase is connected successfully 🚀"
-      }
-    });
-
-    res.json({
-      success: true,
-      sent: response.successCount,
-      failed: response.failureCount
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
   }
 });
 
