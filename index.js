@@ -131,22 +131,22 @@ app.get("/categories", async (_, res) => {
   }
 });
 // ----------------------------------------------------------
-// SAVE / UPDATE FCM TOKEN
+// REGISTER / UPDATE FCM TOKEN
 // ----------------------------------------------------------
 app.post("/fcm/register", async (req, res) => {
   try {
     const { user_id, token, device } = req.body;
 
     if (!user_id || !token) {
-      return res.status(400).json({ error: "Missing user_id or token" });
+      return res.status(400).json({ error: "user_id and token required" });
     }
 
     await pool.query(`
       INSERT INTO tblfcm_tokens (user_id, token, device, last_seen)
       VALUES ($1, $2, $3, NOW())
-      ON CONFLICT (user_id)
+      ON CONFLICT (token)
       DO UPDATE SET
-        token = EXCLUDED.token,
+        user_id = EXCLUDED.user_id,
         device = EXCLUDED.device,
         last_seen = NOW()
     `, [user_id, token, device || 'android']);
