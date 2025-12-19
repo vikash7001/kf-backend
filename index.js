@@ -465,8 +465,9 @@ await client.query(`
 
     await client.query("COMMIT");
     await logActivity({
-  userId: req.user.userid,      // or however you attach logged-in user
-  username: req.user.username,
+    userId: req.body.userid,
+username: req.body.username,
+
   actionType: 'INCOMING',
   description: 'Incoming entry created'
 });
@@ -534,8 +535,8 @@ await client.query(`
 
     await client.query("COMMIT");
     await logActivity({
-  userId: req.user.userid,
-  username: req.user.username,
+  userId: req.body.userid,
+username: req.body.username,
   actionType: 'SALES',
   description: 'Sales entry created'
 });
