@@ -130,6 +130,33 @@ app.get("/categories", async (_, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// SAVE / UPDATE FCM TOKEN
+// ----------------------------------------------------------
+app.post("/fcm/register", async (req, res) => {
+  try {
+    const { user_id, token, device } = req.body;
+
+    if (!user_id || !token) {
+      return res.status(400).json({ error: "Missing user_id or token" });
+    }
+
+    await pool.query(`
+      INSERT INTO tblfcm_tokens (user_id, token, device, last_seen)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        token = EXCLUDED.token,
+        device = EXCLUDED.device,
+        last_seen = NOW()
+    `, [user_id, token, device || 'android']);
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("FCM REGISTER ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // IMAGES (MANAGE IMAGE PAGE)
