@@ -407,27 +407,16 @@ app.post("/incoming", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { UserName, Location, Rows } = req.body;
+    const { UserID, UserName, Location, Rows } = req.body;
 
-    if (!UserName || !Location || !Array.isArray(Rows)) {
+    // ✅ Payload validation
+    if (!UserID || !UserName || !Location || !Array.isArray(Rows)) {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
     await client.query("BEGIN");
 
-    // 1️⃣ Resolve userid from username (SOURCE OF TRUTH)
-    const u = await client.query(
-      `SELECT userid FROM tblusers WHERE username = $1`,
-      [UserName]
-    );
-
-    if (u.rows.length === 0) {
-      throw new Error("Invalid user");
-    }
-
-    const userId = u.rows[0].userid;
-
-    // 2️⃣ Insert Incoming Header
+    // 1️⃣ Insert Incoming Header
     const h = await client.query(
       `
       INSERT INTO tblincomingheader (username, location)
@@ -439,7 +428,7 @@ app.post("/incoming", async (req, res) => {
 
     const headerId = h.rows[0].incomingheaderid;
 
-    // 3️⃣ Process Incoming Rows
+    // 2️⃣ Process Incoming Rows
     for (const r of Rows) {
 
       const p = await client.query(
@@ -511,12 +500,12 @@ app.post("/incoming", async (req, res) => {
       );
     }
 
-    // 4️⃣ COMMIT TRANSACTION
+    // 3️⃣ Commit transaction
     await client.query("COMMIT");
 
-    // 5️⃣ ACTIVITY LOG (AFTER COMMIT, BEFORE RESPONSE)
+    // 4️⃣ Activity log (identity = UserID, display = UserName)
     await logActivity({
-      userId: userId,
+      userId: UserID,
       username: UserName,
       actionType: "INCOMING",
       description: "Incoming entry created"
