@@ -1,4 +1,5 @@
-const { supabase } = require('./supabaseClient');
+// activityLogger.js
+const { pool } = require('./db');
 
 async function logActivity({
   userId,
@@ -6,21 +7,19 @@ async function logActivity({
   actionType,
   description
 }) {
-  const { error } = await supabase
-    .from('tblactivitylog')
-    .insert([{
-      user_id: userId,
-      username: username,
-      actiontype: actionType,
-      description: description,
-      actiontime: new Date()
-    }]);
-
-  if (error) {
-    console.error('Activity log failed:', error);
+  try {
+    await pool.query(
+      `
+      INSERT INTO tblactivitylog
+        (user_id, username, actiontype, description, actiontime)
+      VALUES
+        ($1, $2, $3, $4, NOW())
+      `,
+      [userId, username, actionType, description]
+    );
+  } catch (err) {
+    console.error('❌ Activity log failed:', err);
   }
 }
 
-module.exports = {
-  logActivity
-};
+module.exports = { logActivity };
