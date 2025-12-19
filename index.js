@@ -31,6 +31,19 @@ app.use(cors({
 }));
 app.options("*", cors());
 app.use(express.json());
+// ----------------------------------------------------------
+// DISABLE CACHE FOR API RESPONSES (Cloudflare-safe)
+// ----------------------------------------------------------
+app.use((req, res, next) => {
+  // Disable caching for all API responses
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "Surrogate-Control": "no-store"
+  });
+  next();
+});
 
 // ----------------------------------------------------------
 // ROOT
