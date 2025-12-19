@@ -1,4 +1,9 @@
 const { logActivity } = require('./activityLogger');
+require("./firebase");
+const { notifyAdminLogin } = require("./notificationService");
+const { notifyAdminSale } = require("./notificationService");
+const { notifyIncoming } = require("./notificationService");
+
 
 // ----------------------------------------------------------
 // KARNI FASHIONS BACKEND — PostgreSQL (Supabase)
@@ -11,15 +16,6 @@ const { pool } = require("./db");
 
 const app = express();
 
-// ----------------------------------------------------------
-// FIREBASE
-// ----------------------------------------------------------
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
 
 // ----------------------------------------------------------
 // MIDDLEWARE
@@ -62,30 +58,53 @@ app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const r = await pool.query(`
+    const r = await pool.query(
+      `
       SELECT userid, username, fullname, role, customertype
       FROM tblusers
       WHERE username=$1 AND passwordhash=$2
-    `, [username, password]);
+      `,
+      [username, password]
+    );
 
     if (r.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
-const user = r.rows[0];
 
-await logActivity({
-  userId: user.userid,
-  username: user.username,
-  actionType: 'LOGIN',
-  description: `User ${user.username} logged in`
-});
+    const user = r.rows[0];
+
+    await logActivity({
+      userId: user.userid,
+      username: user.username,
+      actionType: "LOGIN",
+      description: `User ${user.username} logged in`
+    });
+
+    // 🔔 LOGIN NOTIFICATION (ADMIN ONLY)
+    try {
+      await notifyAdminLogin(user.fullname);
+    } catch (err) {
+      console.error("Login notification failed:", err);
+      // DO NOT block login
+    }
 
     const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
-    res.json({ success: true, token, user: r.rows[0] });
+
+    return res.json({
+      success: true,
+      token,
+      user
+    });
+
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error("LOGIN ERROR:", e);
+    return res.status(500).json({
+      error: e?.message || "Unknown server error"
+    });
   }
 });
+
+
 
 // ----------------------------------------------------------
 // PRODUCTS
@@ -422,14 +441,25 @@ app.post("/incoming", async (req, res) => {
   try {
     const { UserID, UserName, Location, Rows } = req.body;
 
-    // ✅ Payload validation
     if (!UserID || !UserName || !Location || !Array.isArray(Rows)) {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
     await client.query("BEGIN");
 
-    // 1️⃣ Insert Incoming Header
+    // 1️⃣ Resolve fullname
+    const u = await client.query(
+      "SELECT fullname FROM tblusers WHERE userid = $1",
+      [UserID]
+    );
+
+    if (u.rows.length === 0) {
+      throw new Error("Invalid user");
+    }
+
+    const createdByName = u.rows[0].fullname;
+
+    // 2️⃣ Insert Incoming Header
     const h = await client.query(
       `
       INSERT INTO tblincomingheader (username, location)
@@ -441,7 +471,7 @@ app.post("/incoming", async (req, res) => {
 
     const headerId = h.rows[0].incomingheaderid;
 
-    // 2️⃣ Process Incoming Rows
+    // 3️⃣ Process Incoming Rows
     for (const r of Rows) {
 
       const p = await client.query(
@@ -466,7 +496,6 @@ app.post("/incoming", async (req, res) => {
             )
           ).rows[0].productid;
 
-      // Incoming details
       await client.query(
         `
         INSERT INTO tblincomingdetails
@@ -476,7 +505,6 @@ app.post("/incoming", async (req, res) => {
         [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]
       );
 
-      // Stock ledger
       await client.query(
         `
         INSERT INTO tblstockledger
@@ -494,7 +522,6 @@ app.post("/incoming", async (req, res) => {
         ]
       );
 
-      // Stock update
       await client.query(
         `
         INSERT INTO tblstock
@@ -513,16 +540,27 @@ app.post("/incoming", async (req, res) => {
       );
     }
 
-    // 3️⃣ Commit transaction
+    // 4️⃣ Commit
     await client.query("COMMIT");
 
-    // 4️⃣ Activity log (identity = UserID, display = UserName)
+    // 5️⃣ Activity log
     await logActivity({
       userId: UserID,
       username: UserName,
       actionType: "INCOMING",
       description: "Incoming entry created"
     });
+
+    // 🔔 6️⃣ INCOMING NOTIFICATION (ADMIN + USER)
+    try {
+      await notifyIncoming({
+        createdByName,
+        location: Location,
+        incomingHeaderId: headerId
+      });
+    } catch (err) {
+      console.error("Incoming notification failed:", err);
+    }
 
     res.json({ success: true });
 
@@ -544,15 +582,21 @@ app.post("/sales", async (req, res) => {
   try {
     const { UserName, Location, Customer, VoucherNo, Rows } = req.body;
 
-    if (!UserName || !Location || !Customer || !VoucherNo || !Array.isArray(Rows)) {
+    if (
+      !UserName ||
+      !Location ||
+      !Customer ||
+      !VoucherNo ||
+      !Array.isArray(Rows)
+    ) {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
     await client.query("BEGIN");
 
-    // 1️⃣ Resolve userid from username
+    // 1️⃣ Resolve userid + fullname from username
     const u = await client.query(
-      `SELECT userid FROM tblusers WHERE username = $1`,
+      `SELECT userid, fullname FROM tblusers WHERE username = $1`,
       [UserName]
     );
 
@@ -561,6 +605,7 @@ app.post("/sales", async (req, res) => {
     }
 
     const userId = u.rows[0].userid;
+    const createdByName = u.rows[0].fullname;
 
     // 2️⃣ Insert Sales Header
     const h = await client.query(
@@ -642,6 +687,19 @@ app.post("/sales", async (req, res) => {
       actionType: "SALES",
       description: "Sales entry created"
     });
+
+    // 🔔 6️⃣ SALES NOTIFICATION (ADMIN ONLY)
+    try {
+      await notifyAdminSale({
+        createdByName,
+        customerName: Customer,
+        location: Location,
+        salesId
+      });
+    } catch (err) {
+      console.error("Sales notification failed:", err);
+      // do NOT block API
+    }
 
     res.json({ success: true });
 
