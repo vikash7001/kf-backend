@@ -669,7 +669,6 @@ app.post("/sales", async (req, res) => {
       !UserName ||
       !Location ||
       !Customer ||
-      !VoucherNo ||
       !Array.isArray(Rows)
     ) {
       return res.status(400).json({ error: "Invalid payload" });
