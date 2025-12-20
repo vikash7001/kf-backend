@@ -1,5 +1,6 @@
 const admin = require("./firebase");
 const { pool } = require("./db");
+console.log("🚨 notifyAdminSale CALLED");
 
 // 🔔 LOGIN NOTIFICATION (ADMIN ONLY)
 async function notifyAdminLogin(fullname) {
