@@ -130,7 +130,9 @@ app.get("/products", async (_, res) => {
 app.get("/series", async (_, res) => {
   try {
     const r = await pool.query(`
-      SELECT seriesname AS "SeriesName"
+      SELECT
+        seriesname   AS "SeriesName",
+        categoryname AS "CategoryName"
       FROM tblseries
       WHERE isactive = true
       ORDER BY seriesname
@@ -140,6 +142,7 @@ app.get("/series", async (_, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 
 app.get("/customers", async (_, res) => {
   try {
