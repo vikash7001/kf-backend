@@ -1,13 +1,13 @@
 const admin = require("./firebase");
 const { pool } = require("./db");
-console.log("🚨 notifyAdminSale CALLED");
 
-// 🔔 LOGIN NOTIFICATION (ADMIN ONLY)
+/* ======================================================
+   🔔 LOGIN NOTIFICATION (ADMIN ONLY)
+====================================================== */
 async function notifyAdminLogin(fullname) {
   const admins = await pool.query(
     "SELECT userid FROM tblusers WHERE role = 'Admin'"
   );
-
   if (!admins.rows.length) return;
 
   const adminIds = admins.rows.map(r => r.userid);
@@ -29,13 +29,17 @@ async function notifyAdminLogin(fullname) {
   });
 }
 
-// 🔔 SALES NOTIFICATION (ADMIN ONLY)
+/* ======================================================
+   🔔 SALES NOTIFICATION (ADMIN ONLY)
+====================================================== */
 async function notifyAdminSale({
   createdByName,
   customerName,
   location,
   salesId
 }) {
+  console.log("🔥 notifyAdminSale ENTERED", salesId);
+
   const admins = await pool.query(
     "SELECT userid FROM tblusers WHERE role = 'Admin'"
   );
@@ -51,19 +55,17 @@ async function notifyAdminSale({
   const tokens = tokensResult.rows.map(r => r.token).filter(Boolean);
   if (!tokens.length) return;
 
-const pcsResult = await pool.query(
-  `
-  SELECT COALESCE(SUM(quantity), 0) AS total_pcs
-  FROM tblsalesdetails
-  WHERE salesid = $1
-  `,
-  [salesId]
-);
-
-const totalPcs = pcsResult.rows[0].total_pcs;
-
+  const pcsResult = await pool.query(
+    `
+    SELECT COALESCE(SUM(quantity), 0) AS total_pcs
+    FROM tblsalesdetails
+    WHERE salesid = $1
+    `,
+    [salesId]
+  );
 
   const totalPcs = pcsResult.rows[0].total_pcs;
+  console.log("🔥 SALES PCS:", totalPcs);
 
   await admin.messaging().sendEachForMulticast({
     notification: {
@@ -77,14 +79,18 @@ const totalPcs = pcsResult.rows[0].total_pcs;
     },
     tokens
   });
+
+  console.log("🔥 SALES NOTIFICATION SENT");
 }
-// 🔔 INCOMING NOTIFICATION (ADMIN + USER)
+
+/* ======================================================
+   🔔 INCOMING NOTIFICATION (ADMIN + USER)
+====================================================== */
 async function notifyIncoming({
   createdByName,
   location,
   incomingHeaderId
 }) {
-  // 1️⃣ Admin + User roles
   const users = await pool.query(
     "SELECT userid FROM tblusers WHERE role IN ('Admin','User')"
   );
@@ -92,7 +98,6 @@ async function notifyIncoming({
 
   const userIds = users.rows.map(r => r.userid);
 
-  // 2️⃣ Tokens
   const tokensResult = await pool.query(
     "SELECT token FROM tblfcm_tokens WHERE user_id = ANY($1)",
     [userIds]
@@ -101,7 +106,6 @@ async function notifyIncoming({
   const tokens = tokensResult.rows.map(r => r.token).filter(Boolean);
   if (!tokens.length) return;
 
-  // 3️⃣ Total PCS
   const pcsResult = await pool.query(
     `
     SELECT COALESCE(SUM(quantity),0) AS total_pcs
@@ -113,7 +117,6 @@ async function notifyIncoming({
 
   const totalPcs = pcsResult.rows[0].total_pcs;
 
-  // 4️⃣ Send notification
   await admin.messaging().sendEachForMulticast({
     notification: {
       title: "Karni Fashions",
@@ -127,7 +130,9 @@ async function notifyIncoming({
   });
 }
 
-// ✅ SINGLE, CLEAN EXPORT
+/* ======================================================
+   ✅ EXPORTS
+====================================================== */
 module.exports = {
   notifyAdminLogin,
   notifyAdminSale,
