@@ -174,6 +174,83 @@ app.get("/categories", async (_, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/categories", async (req, res) => {
+  try {
+    const { CategoryName } = req.body;
+    if (!CategoryName) {
+      return res.status(400).json({ error: "CategoryName required" });
+    }
+
+    await pool.query(
+      `INSERT INTO tblcategory (categoryname, isactive)
+       VALUES ($1, true)`,
+      [CategoryName.trim()]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("CATEGORY POST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/series", async (req, res) => {
+  try {
+    const { SeriesName, CategoryID } = req.body;
+    if (!SeriesName || !CategoryID) {
+      return res.status(400).json({ error: "SeriesName & CategoryID required" });
+    }
+
+    await pool.query(
+      `INSERT INTO tblseries (seriesname, categoryid, isactive)
+       VALUES ($1, $2, true)`,
+      [SeriesName.trim(), CategoryID]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("SERIES POST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/products", async (req, res) => {
+  try {
+    const { Item, SeriesID } = req.body;
+    if (!Item || !SeriesID) {
+      return res.status(400).json({ error: "Item & SeriesID required" });
+    }
+
+    await pool.query(
+      `INSERT INTO tblproduct (item, seriesid)
+       VALUES ($1, $2)`,
+      [Item.trim(), SeriesID]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("PRODUCT POST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/customers", async (req, res) => {
+  try {
+    const { CustomerName } = req.body;
+    if (!CustomerName) {
+      return res.status(400).json({ error: "CustomerName required" });
+    }
+
+    await pool.query(
+      `INSERT INTO tblcustomer (customername)
+       VALUES ($1)`,
+      [CustomerName.trim()]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("CUSTOMER POST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ----------------------------------------------------------
 // REGISTER / UPDATE FCM TOKEN
 // ----------------------------------------------------------
