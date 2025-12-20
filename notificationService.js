@@ -50,14 +50,17 @@ async function notifyAdminSale({
   const tokens = tokensResult.rows.map(r => r.token).filter(Boolean);
   if (!tokens.length) return;
 
-  const pcsResult = await pool.query(
-    `
-    SELECT COALESCE(SUM(qty),0) AS total_pcs
-    FROM tblsalesdetails
-    WHERE sales_id = $1
-    `,
-    [salesId]
-  );
+const pcsResult = await pool.query(
+  `
+  SELECT COALESCE(SUM(quantity), 0) AS total_pcs
+  FROM tblsalesdetails
+  WHERE salesid = $1
+  `,
+  [salesId]
+);
+
+const totalPcs = pcsResult.rows[0].total_pcs;
+
 
   const totalPcs = pcsResult.rows[0].total_pcs;
 
