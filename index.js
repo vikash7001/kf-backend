@@ -1,8 +1,10 @@
 const { logActivity } = require('./activityLogger');
 require("./firebase");
-const { notifyAdminLogin } = require("./notificationService");
-const { notifyAdminSale } = require("./notificationService");
-const { notifyIncoming } = require("./notificationService");
+const {
+  notifyAdminLogin,
+  notifyAdminSale,
+  notifyIncoming
+} = require("./notificationService");
 
 
 // ----------------------------------------------------------
