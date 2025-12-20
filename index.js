@@ -195,15 +195,15 @@ app.post("/categories", async (req, res) => {
 });
 app.post("/series", async (req, res) => {
   try {
-    const { SeriesName, CategoryID } = req.body;
-    if (!SeriesName || !CategoryID) {
-      return res.status(400).json({ error: "SeriesName & CategoryID required" });
+    const { SeriesName, CategoryName } = req.body;
+    if (!SeriesName || !CategoryName) {
+      return res.status(400).json({ error: "SeriesName & CategoryName required" });
     }
 
     await pool.query(
-      `INSERT INTO tblseries (seriesname, categoryid, isactive)
+      `INSERT INTO tblseries (seriesname, categoryname, isactive)
        VALUES ($1, $2, true)`,
-      [SeriesName.trim(), CategoryID]
+      [SeriesName.trim(), CategoryName.trim()]
     );
 
     res.json({ success: true });
@@ -214,15 +214,15 @@ app.post("/series", async (req, res) => {
 });
 app.post("/products", async (req, res) => {
   try {
-    const { Item, SeriesID } = req.body;
-    if (!Item || !SeriesID) {
-      return res.status(400).json({ error: "Item & SeriesID required" });
+    const { Item, SeriesName, CategoryName } = req.body;
+    if (!Item || !SeriesName || !CategoryName) {
+      return res.status(400).json({ error: "Item, SeriesName & CategoryName required" });
     }
 
     await pool.query(
-      `INSERT INTO tblproduct (item, seriesid)
-       VALUES ($1, $2)`,
-      [Item.trim(), SeriesID]
+      `INSERT INTO tblproduct (item, seriesname, categoryname)
+       VALUES ($1, $2, $3)`,
+      [Item.trim(), SeriesName.trim(), CategoryName.trim()]
     );
 
     res.json({ success: true });
@@ -231,6 +231,7 @@ app.post("/products", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 app.post("/customers", async (req, res) => {
   try {
     const { CustomerName } = req.body;
