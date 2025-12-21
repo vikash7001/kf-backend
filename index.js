@@ -404,7 +404,8 @@ app.get("/images/series/:series", async (req, res) => {
   try {
     const { series } = req.params;
 const mode = req.query.mode || "either";
-const role = req.user.role;   // already available from auth middleware
+const role = (req.user?.role || "customer").toLowerCase();
+   // already available from auth middleware
 const stockCondition = buildStockCondition(mode, role);
 
     const r = await pool.query(`
@@ -429,7 +430,8 @@ app.get("/images/category/:category", async (req, res) => {
   try {
     const { category } = req.params;
 const mode = req.query.mode || "either";
-const role = req.user.role;   // already available from auth middleware
+const role = (req.user?.role || "customer").toLowerCase();
+   // already available from auth middleware
 const stockCondition = buildStockCondition(mode, role);
 
     const r = await pool.query(`
@@ -454,7 +456,8 @@ app.post("/images/series/list", async (req, res) => {
   try {
     const seriesList = req.body;
 const mode = req.query.mode || "either";
-const role = req.user.role;   // already available from auth middleware
+const role = (req.user?.role || "customer").toLowerCase();
+   // already available from auth middleware
 const stockCondition = buildStockCondition(mode, role);
 
     if (!Array.isArray(seriesList) || seriesList.length === 0)
@@ -482,7 +485,8 @@ app.post("/images/category/list", async (req, res) => {
   try {
     const categoryList = req.body;
 const mode = req.query.mode || "either";
-const role = req.user.role;   // already available from auth middleware
+const role = (req.user?.role || "customer").toLowerCase();
+   // already available from auth middleware
 const stockCondition = buildStockCondition(mode, role);
 
     if (!Array.isArray(categoryList) || categoryList.length === 0)
