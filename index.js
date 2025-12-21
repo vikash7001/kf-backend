@@ -515,9 +515,9 @@ app.post("/stock", async (req, res) => {
   }
 });
 // GET ledger by product
-app.get("/stockledger/:productId", async (req, res) => {
+app.get("/stockledger/:itemCode", async (req, res) => {
   try {
-    const { productId } = req.params;
+    const { itemCode } = req.params;
 
     const r = await pool.query(`
       SELECT
@@ -531,7 +531,7 @@ app.get("/stockledger/:productId", async (req, res) => {
       FROM tblstockledger
       WHERE item = $1
       ORDER BY movementdate
-    `, [productId]);
+    `, [itemCode]);
 
     res.json(r.rows);
   } catch (e) {
