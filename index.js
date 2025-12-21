@@ -514,6 +514,26 @@ app.post("/stock", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// GET ledger by product
+app.get("/stockledger/:productId", async (req, res) => {
+  const { productId } = req.params;
+
+  const r = await pool.query(`
+    SELECT
+      ledgerid,
+      movementdate,
+      movementtype,
+      referenceid,
+      quantity,
+      locationname,
+      username
+    FROM tblstockledger
+    WHERE item = $1
+    ORDER BY movementdate
+  `, [productId]);
+
+  res.json(r.rows);
+});
 
 // ----------------------------------------------------------
 // INCOMING (PURCHASE)  ❌ UNCHANGED
