@@ -129,6 +129,20 @@ async function notifyIncoming({
     tokens
   });
 }
+async function notifyAppUpdate() {
+  const message = {
+    topic: "app_updates",
+    notification: {
+      title: "App Update Available",
+      body: "A new version is available. Tap to download."
+    },
+    data: {
+      url: "https://drive.google.com/uc?id=1QzHIdeg23D7JluIw1p6hizMH3P7snwkO&export=download"
+    }
+  };
+
+  await admin.messaging().send(message);
+}
 
 /* ======================================================
    ✅ EXPORTS
@@ -136,5 +150,6 @@ async function notifyIncoming({
 module.exports = {
   notifyAdminLogin,
   notifyAdminSale,
-  notifyIncoming
+  notifyIncoming,
+  notifyAppUpdate
 };

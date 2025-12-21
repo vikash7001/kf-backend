@@ -3,8 +3,10 @@ require("./firebase");
 const {
   notifyAdminLogin,
   notifyAdminSale,
-  notifyIncoming
+  notifyIncoming,
+  notifyAppUpdate
 } = require("./notificationService");
+
 
 
 // ----------------------------------------------------------
@@ -849,6 +851,15 @@ app.post("/sales", async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+  }
+});
+app.post("/admin/notify-app-update", async (req, res) => {
+  try {
+    await notifyAppUpdate();
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 
