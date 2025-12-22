@@ -80,14 +80,16 @@ app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const r = await pool.query(
-      `
-      SELECT userid, username, fullname, role, customertype
-      FROM tblusers
-      WHERE username=$1 AND passwordhash=$2
-      `,
-      [username, password]
-    );
+const r = await pool.query(
+  `
+  SELECT userid, username, fullname, role
+  FROM tblusers
+  WHERE LOWER(username) = LOWER($1)
+    AND passwordhash = $2
+  `,
+  [username, password]
+);
+
 
     if (r.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
