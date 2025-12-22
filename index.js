@@ -935,6 +935,16 @@ app.post("/admin/notify-app-update", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// APP UPDATE (IN-APP UPDATE CHECK)
+// ----------------------------------------------------------
+app.get("/app/update", (req, res) => {
+  res.json({
+    latest_version_code: 12,
+    force_update: false,
+    download_url: "https://drive.google.com/uc?id=1QzHIdeg23D7JluIw1p6hizMH3P7snwkO"
+  });
+});
 
 // ----------------------------------------------------------
 // START
