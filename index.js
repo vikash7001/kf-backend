@@ -127,6 +127,89 @@ app.post("/login", async (req, res) => {
 });
 
 
+app.post("/signup", async (req, res) => {
+  try {
+    const {
+      username,
+      password,
+      fullName,
+      businessName,
+      address,
+      mobile
+    } = req.body;
+
+    // 1️⃣ Basic validation
+    if (!username || !password || !fullName) {
+      return res.status(400).json({
+        error: "Username, password, and full name are required"
+      });
+    }
+
+    // 2️⃣ Check if username already exists
+    const exists = await pool.query(
+      `SELECT 1 FROM tblusers WHERE username = $1`,
+      [username]
+    );
+
+    if (exists.rows.length > 0) {
+      return res.status(409).json({
+        error: "Username already exists"
+      });
+    }
+
+    // 3️⃣ Insert user
+    const insert = await pool.query(
+      `
+      INSERT INTO tblusers
+      (
+        username,
+        passwordhash,
+        fullname,
+        businessname,
+        address,
+        mobile,
+        role,
+        customertype,
+        isactive,
+        createdon
+      )
+      VALUES
+      ($1,$2,$3,$4,$5,$6,'USER','CUSTOMER',true,NOW())
+      RETURNING userid, username, fullname, role, customertype
+      `,
+      [
+        username,
+        password,        // 🔴 matches your current login logic
+        fullName,
+        businessName,
+        address,
+        mobile
+      ]
+    );
+
+    const user = insert.rows[0];
+
+    // 4️⃣ Log activity
+    await logActivity({
+      userId: user.userid,
+      username: user.username,
+      actionType: "SIGNUP",
+      description: `New user signup: ${user.username}`
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Signup successful",
+      user
+    });
+
+  } catch (e) {
+    console.error("SIGNUP ERROR:", e);
+    return res.status(500).json({
+      error: e?.message || "Signup failed"
+    });
+  }
+});
 
 // ----------------------------------------------------------
 // PRODUCTS
