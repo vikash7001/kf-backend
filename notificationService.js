@@ -3,10 +3,11 @@ const { pool } = require("./db");
 
 /* ======================================================
    🔔 LOGIN NOTIFICATION (ADMIN ONLY)
+   Case-insensitive role check
 ====================================================== */
 async function notifyAdminLogin(fullname) {
   const admins = await pool.query(
-    "SELECT userid FROM tblusers WHERE role = 'Admin'"
+    "SELECT userid FROM tblusers WHERE UPPER(role) = 'ADMIN'"
   );
   if (!admins.rows.length) return;
 
@@ -31,6 +32,7 @@ async function notifyAdminLogin(fullname) {
 
 /* ======================================================
    🔔 SALES NOTIFICATION (ADMIN ONLY)
+   Case-insensitive role check
 ====================================================== */
 async function notifyAdminSale({
   createdByName,
@@ -41,7 +43,7 @@ async function notifyAdminSale({
   console.log("🔥 notifyAdminSale ENTERED", salesId);
 
   const admins = await pool.query(
-    "SELECT userid FROM tblusers WHERE role = 'Admin'"
+    "SELECT userid FROM tblusers WHERE UPPER(role) = 'ADMIN'"
   );
   if (!admins.rows.length) return;
 
@@ -65,7 +67,6 @@ async function notifyAdminSale({
   );
 
   const totalPcs = pcsResult.rows[0].total_pcs;
-  console.log("🔥 SALES PCS:", totalPcs);
 
   await admin.messaging().sendEachForMulticast({
     notification: {
@@ -85,6 +86,7 @@ async function notifyAdminSale({
 
 /* ======================================================
    🔔 INCOMING NOTIFICATION (ADMIN + USER)
+   Case-insensitive role check
 ====================================================== */
 async function notifyIncoming({
   createdByName,
@@ -92,7 +94,7 @@ async function notifyIncoming({
   incomingHeaderId
 }) {
   const users = await pool.query(
-    "SELECT userid FROM tblusers WHERE role IN ('Admin','User')"
+    "SELECT userid FROM tblusers WHERE UPPER(role) IN ('ADMIN','USER')"
   );
   if (!users.rows.length) return;
 
@@ -108,7 +110,7 @@ async function notifyIncoming({
 
   const pcsResult = await pool.query(
     `
-    SELECT COALESCE(SUM(quantity),0) AS total_pcs
+    SELECT COALESCE(SUM(quantity), 0) AS total_pcs
     FROM tblincomingdetails
     WHERE incomingheaderid = $1
     `,
@@ -129,6 +131,10 @@ async function notifyIncoming({
     tokens
   });
 }
+
+/* ======================================================
+   🔔 APP UPDATE NOTIFICATION (ALL USERS – TOPIC)
+====================================================== */
 async function notifyAppUpdate() {
   const message = {
     topic: "app_updates",

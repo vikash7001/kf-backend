@@ -596,9 +596,13 @@ app.post("/images/category/list", async (req, res) => {
 // ----------------------------------------------------------
 // STOCK  ❌ UNCHANGED
 // ----------------------------------------------------------
+// ----------------------------------------------------------
+// STOCK  ✅ ROLE ONLY (FINAL)
+// ----------------------------------------------------------
 app.post("/stock", async (req, res) => {
   try {
-    const { role, customerType } = req.body;
+    const { role } = req.body;
+    const roleKey = (role || "CUSTOMER").toUpperCase();
 
     const r = await pool.query(`
       SELECT
@@ -613,23 +617,35 @@ app.post("/stock", async (req, res) => {
       ORDER BY item
     `);
 
-    if (role === "Customer" && customerType == 1) return res.json([]);
-
-    if (role === "Customer" && customerType == 2) {
-      return res.json(r.rows.map(s => ({
-        ProductID: s.ProductID,
-        Item: s.Item,
-        SeriesName: s.SeriesName,
-        CategoryName: s.CategoryName,
-        Availability: Number(s.TotalQty) > 5 ? "Available" : ""
-      })));
+    // ❌ CUSTOMER → NO STOCK
+    if (roleKey === "CUSTOMER") {
+      return res.json([]);
     }
 
-    res.json(r.rows);
+    // ✅ CUSTOMER_PREMIUM → AVAILABILITY ONLY
+    if (roleKey === "CUSTOMER_PREMIUM") {
+      return res.json(
+        r.rows.map(s => ({
+          ProductID: s.ProductID,
+          Item: s.Item,
+          SeriesName: s.SeriesName,
+          CategoryName: s.CategoryName,
+          JaipurAvailable: Number(s.JaipurQty) > 4,
+          KolkataAvailable: Number(s.KolkataQty) > 4
+        }))
+      );
+    }
+
+    // ✅ ADMIN / USER → FULL STOCK
+    return res.json(r.rows);
+
   } catch (e) {
+    console.error("STOCK API ERROR:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
+
+
 // GET ledger by product
 app.get("/stockledger/:itemCode", async (req, res) => {
   try {
