@@ -384,7 +384,7 @@ app.get("/images/list", async (_, res) => {
     SELECT
       P.productid AS "ProductID",
       P.item AS "Item",
-      COALESCE(I.imageurl,'') AS "ImageURL"
+      COALESCE(I.imageurl,'n/a') AS "ImageURL"
     FROM tblproduct P
     LEFT JOIN tblitemimages I ON I.productid = P.productid
     ORDER BY P.item
@@ -458,8 +458,9 @@ app.get("/image/:productId", async (req, res) => {
 
     const r = await pool.query(`
       SELECT
-        i.productid   AS "ProductID",
-        i.imageurl    AS "ImageURL"
+SELECT
+  i.productid   AS "ProductID",
+  COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN vwstocksummary s ON s.productid = i.productid
       WHERE i.productid = $1
@@ -485,8 +486,9 @@ const stockCondition = buildStockCondition(mode, role);
 
     const r = await pool.query(`
       SELECT
-        i.productid AS "ProductID",
-        i.imageurl  AS "ImageURL"
+SELECT
+  i.productid AS "ProductID",
+  COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
       JOIN vwstocksummary s ON s.productid = p.productid
@@ -511,8 +513,9 @@ const stockCondition = buildStockCondition(mode, role);
 
     const r = await pool.query(`
       SELECT
-        i.productid AS "ProductID",
-        i.imageurl  AS "ImageURL"
+SELECT
+  i.productid AS "ProductID",
+  COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
       JOIN vwstocksummary s ON s.productid = p.productid
@@ -540,8 +543,9 @@ const stockCondition = buildStockCondition(mode, role);
 
     const r = await pool.query(`
       SELECT
-        i.productid AS "ProductID",
-        i.imageurl  AS "ImageURL"
+SELECT
+  i.productid AS "ProductID",
+  COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
       JOIN vwstocksummary s ON s.productid = p.productid
@@ -569,8 +573,9 @@ const stockCondition = buildStockCondition(mode, role);
 
     const r = await pool.query(`
       SELECT
-        i.productid AS "ProductID",
-        i.imageurl  AS "ImageURL"
+SELECT
+  i.productid AS "ProductID",
+  i.imageurl  AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
       JOIN vwstocksummary s ON s.productid = p.productid
@@ -942,7 +947,7 @@ app.get("/app/update", (req, res) => {
   res.json({
     latest_version_code: 12,
     force_update: false,
-    download_url: "https://drive.google.com/uc?id=1QzHIdeg23D7JluIw1p6hizMH3P7snwkO"
+    download_url: "https://drive.google.com/file/d/1QzHIdeg23D7JluIw1p6hizMH3P7snwkO"
   });
 });
 
