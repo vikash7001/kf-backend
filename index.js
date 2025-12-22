@@ -138,14 +138,13 @@ app.post("/signup", async (req, res) => {
       mobile
     } = req.body;
 
-    // 1️⃣ Basic validation
     if (!username || !password || !fullName) {
       return res.status(400).json({
         error: "Username, password, and full name are required"
       });
     }
 
-    // 2️⃣ Check if username already exists
+    // Check duplicate username
     const exists = await pool.query(
       `SELECT 1 FROM tblusers WHERE username = $1`,
       [username]
@@ -157,7 +156,7 @@ app.post("/signup", async (req, res) => {
       });
     }
 
-    // 3️⃣ Insert user
+    // ✅ FIXED INSERT (no isactive)
     const insert = await pool.query(
       `
       INSERT INTO tblusers
@@ -170,16 +169,15 @@ app.post("/signup", async (req, res) => {
         mobile,
         role,
         customertype,
-        isactive,
         createdon
       )
       VALUES
-      ($1,$2,$3,$4,$5,$6,'USER','CUSTOMER',true,NOW())
+      ($1,$2,$3,$4,$5,$6,'USER','CUSTOMER',NOW())
       RETURNING userid, username, fullname, role, customertype
       `,
       [
         username,
-        password,        // 🔴 matches your current login logic
+        password,
         fullName,
         businessName,
         address,
@@ -189,7 +187,6 @@ app.post("/signup", async (req, res) => {
 
     const user = insert.rows[0];
 
-    // 4️⃣ Log activity
     await logActivity({
       userId: user.userid,
       username: user.username,
