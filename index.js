@@ -138,14 +138,13 @@ app.post("/signup", async (req, res) => {
       mobile
     } = req.body;
 
-    // Required fields
     if (!username || !password) {
       return res.status(400).json({
         error: "Username and password are required"
       });
     }
 
-    // Check duplicate username
+    // Check if username already exists
     const exists = await pool.query(
       `SELECT 1 FROM tblusers WHERE username = $1`,
       [username]
@@ -157,7 +156,7 @@ app.post("/signup", async (req, res) => {
       });
     }
 
-    // Insert user (ONLY valid columns)
+    // ✅ INSERT ONLY REAL COLUMNS
     const insert = await pool.query(
       `
       INSERT INTO tblusers
@@ -188,25 +187,16 @@ app.post("/signup", async (req, res) => {
       ]
     );
 
-    const user = insert.rows[0];
-
-    await logActivity({
-      userId: user.userid,
-      username: user.username,
-      actionType: "SIGNUP",
-      description: `New user signup: ${user.username}`
-    });
-
     return res.status(201).json({
       success: true,
       message: "Signup successful",
-      user
+      user: insert.rows[0]
     });
 
   } catch (e) {
     console.error("SIGNUP ERROR:", e);
     return res.status(500).json({
-      error: e?.message || "Signup failed"
+      error: e.message
     });
   }
 });
