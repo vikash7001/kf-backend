@@ -138,9 +138,10 @@ app.post("/signup", async (req, res) => {
       mobile
     } = req.body;
 
-    if (!username || !password || !fullName) {
+    // Required fields
+    if (!username || !password) {
       return res.status(400).json({
-        error: "Username, password, and full name are required"
+        error: "Username and password are required"
       });
     }
 
@@ -156,7 +157,7 @@ app.post("/signup", async (req, res) => {
       });
     }
 
-    // ✅ FIXED INSERT (no isactive)
+    // Insert user (ONLY valid columns)
     const insert = await pool.query(
       `
       INSERT INTO tblusers
@@ -166,22 +167,24 @@ app.post("/signup", async (req, res) => {
         fullname,
         businessname,
         address,
-        mobile,
-        role,
-        customertype,
-        createdon
+        mobile
       )
       VALUES
-      ($1,$2,$3,$4,$5,$6,'USER','CUSTOMER',NOW())
-      RETURNING userid, username, fullname, role, customertype
+      ($1,$2,$3,$4,$5,$6)
+      RETURNING
+        userid,
+        username,
+        fullname,
+        role,
+        customertype
       `,
       [
         username,
         password,
-        fullName,
-        businessName,
-        address,
-        mobile
+        fullName || null,
+        businessName || null,
+        address || null,
+        mobile || null
       ]
     );
 
