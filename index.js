@@ -140,6 +140,7 @@ app.post("/signup", async (req, res) => {
       mobile
     } = req.body;
 
+    // Basic validation
     if (!username || !password) {
       return res.status(400).json({
         error: "Username and password are required"
@@ -148,7 +149,7 @@ app.post("/signup", async (req, res) => {
 
     // Check if username already exists
     const exists = await pool.query(
-      `SELECT 1 FROM tblusers WHERE username = $1`,
+      "SELECT 1 FROM tblusers WHERE username = $1",
       [username]
     );
 
@@ -158,37 +159,36 @@ app.post("/signup", async (req, res) => {
       });
     }
 
-    // ✅ INSERT ONLY REAL COLUMNS
+    // Insert user (ONLY existing columns)
     const insert = await pool.query(
       `
-const insert = await pool.query(
-  `
-  INSERT INTO tblusers
-  (
-    username,
-    passwordhash,
-    fullname,
-    businessname,
-    address,
-    mobile
-  )
-  VALUES
-    ($1,$2,$3,$4,$5,$6)
-  RETURNING
-    userid,
-    username,
-    fullname,
-    role
-  `,
-  [
-    username,
-    password,
-    fullName || null,
-    businessName || null,
-    address || null,
-    mobile || null
-  ]
-);
+      INSERT INTO tblusers
+      (
+        username,
+        passwordhash,
+        fullname,
+        businessname,
+        address,
+        mobile
+      )
+      VALUES
+        ($1,$2,$3,$4,$5,$6)
+      RETURNING
+        userid,
+        username,
+        fullname,
+        role
+      `,
+      [
+        username,
+        password,          // later replace with bcrypt hash
+        fullName || null,
+        businessName || null,
+        address || null,
+        mobile || null
+      ]
+    );
+
     return res.status(201).json({
       success: true,
       message: "Signup successful",
