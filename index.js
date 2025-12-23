@@ -161,34 +161,34 @@ app.post("/signup", async (req, res) => {
     // ✅ INSERT ONLY REAL COLUMNS
     const insert = await pool.query(
       `
-      INSERT INTO tblusers
-      (
-        username,
-        passwordhash,
-        fullname,
-        businessname,
-        address,
-        mobile
-      )
-      VALUES
-      ($1,$2,$3,$4,$5,$6)
-      RETURNING
-        userid,
-        username,
-        fullname,
-        role,
-        customertype
-      `,
-      [
-        username,
-        password,
-        fullName || null,
-        businessName || null,
-        address || null,
-        mobile || null
-      ]
-    );
-
+const insert = await pool.query(
+  `
+  INSERT INTO tblusers
+  (
+    username,
+    passwordhash,
+    fullname,
+    businessname,
+    address,
+    mobile
+  )
+  VALUES
+    ($1,$2,$3,$4,$5,$6)
+  RETURNING
+    userid,
+    username,
+    fullname,
+    role
+  `,
+  [
+    username,
+    password,
+    fullName || null,
+    businessName || null,
+    address || null,
+    mobile || null
+  ]
+);
     return res.status(201).json({
       success: true,
       message: "Signup successful",
