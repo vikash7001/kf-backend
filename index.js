@@ -601,6 +601,8 @@ app.post("/images/category/list", async (req, res) => {
 // ----------------------------------------------------------
 // STOCK  ✅ ROLE ONLY (FINAL)
 // ----------------------------------------------------------
+
+
 app.post("/stock", async (req, res) => {
   try {
     const { role } = req.body;
@@ -626,6 +628,7 @@ app.post("/stock", async (req, res) => {
 
     // ✅ CUSTOMER_PREMIUM → AVAILABILITY ONLY
 if (roleKey === "CUSTOMER_PREMIUM") {
+console.log("STOCK RESPONSE SAMPLE:", r.rows[0]);
   return res.json(
     r.rows.map(s => ({
       ProductID: s.ProductID,
