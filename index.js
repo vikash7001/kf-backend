@@ -625,18 +625,19 @@ app.post("/stock", async (req, res) => {
     }
 
     // ✅ CUSTOMER_PREMIUM → AVAILABILITY ONLY
-    if (roleKey === "CUSTOMER_PREMIUM") {
-      return res.json(
-        r.rows.map(s => ({
-          ProductID: s.ProductID,
-          Item: s.Item,
-          SeriesName: s.SeriesName,
-          CategoryName: s.CategoryName,
-          JaipurAvailable: Number(s.JaipurQty) > 4,
-          KolkataAvailable: Number(s.KolkataQty) > 4
-        }))
-      );
-    }
+if (roleKey === "CUSTOMER_PREMIUM") {
+  return res.json(
+    r.rows.map(s => ({
+      ProductID: s.ProductID,
+      Item: s.Item,
+      SeriesName: s.SeriesName,
+      CategoryName: s.CategoryName,
+      JaipurQty: Number(s.JaipurQty),
+      KolkataQty: Number(s.KolkataQty)
+    }))
+  );
+}
+
 
     // ✅ ADMIN / USER → FULL STOCK
     return res.json(r.rows);
