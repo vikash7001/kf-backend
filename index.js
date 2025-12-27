@@ -52,7 +52,7 @@ function buildStockCondition(mode, role) {
 
   switch (mode) {
     case "all":
-      return `TRUE`; // no stock check
+      return null; // IMPORTANT: means "do not use stock at all"
     case "jaipur":
       return `s.jaipurqty > 5`;
     case "kolkata":
@@ -481,21 +481,21 @@ SELECT
 app.get("/images/series/:series", async (req, res) => {
   try {
     const { series } = req.params;
-const mode = req.query.mode || "either";
-const role = (req.user?.role || "customer").toLowerCase();
-   // already available from auth middleware
-const stockCondition = buildStockCondition(mode, role);
+    const mode = req.query.mode || "either";
+    const role = (req.user?.role || "customer").toLowerCase();
+
+    const stockCondition = buildStockCondition(mode, role);
+    const useStock = stockCondition !== null;
 
     const r = await pool.query(`
       SELECT
-SELECT
-  i.productid AS "ProductID",
-  COALESCE(i.imageurl,'n/a') AS "ImageURL"
+        i.productid AS "ProductID",
+        COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
-      JOIN vwstocksummary s ON s.productid = p.productid
+      ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.seriesname = $1
-        AND ${stockCondition}
+      ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
     `, [series]);
 
@@ -505,6 +505,7 @@ SELECT
     res.status(500).json({ error: e.message });
   }
 });
+
 app.get("/images/category/:category", async (req, res) => {
   try {
     const { category } = req.params;
@@ -512,7 +513,7 @@ app.get("/images/category/:category", async (req, res) => {
     const role = (req.user?.role || "customer").toLowerCase();
 
     const stockCondition = buildStockCondition(mode, role);
-    const safeStockCondition = stockCondition || "TRUE";
+    const useStock = stockCondition !== null;
 
     const r = await pool.query(`
       SELECT
@@ -520,9 +521,9 @@ app.get("/images/category/:category", async (req, res) => {
         COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
-      JOIN vwstocksummary s ON s.productid = p.productid
+      ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.categoryname = $1
-        AND ${safeStockCondition}
+      ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
     `, [category]);
 
@@ -533,17 +534,18 @@ app.get("/images/category/:category", async (req, res) => {
   }
 });
 
+
 app.post("/images/series/list", async (req, res) => {
   try {
     const seriesList = req.body;
+    if (!Array.isArray(seriesList) || seriesList.length === 0)
+      return res.json([]);
+
     const mode = req.query.mode || "either";
     const role = (req.user?.role || "customer").toLowerCase();
 
     const stockCondition = buildStockCondition(mode, role);
-    const safeStockCondition = stockCondition || "TRUE";
-
-    if (!Array.isArray(seriesList) || seriesList.length === 0)
-      return res.json([]);
+    const useStock = stockCondition !== null;
 
     const r = await pool.query(`
       SELECT
@@ -551,9 +553,9 @@ app.post("/images/series/list", async (req, res) => {
         COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
-      JOIN vwstocksummary s ON s.productid = p.productid
+      ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.seriesname = ANY($1)
-        AND ${safeStockCondition}
+      ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
     `, [seriesList]);
 
@@ -564,17 +566,18 @@ app.post("/images/series/list", async (req, res) => {
   }
 });
 
+
 app.post("/images/category/list", async (req, res) => {
   try {
     const categoryList = req.body;
+    if (!Array.isArray(categoryList) || categoryList.length === 0)
+      return res.json([]);
+
     const mode = req.query.mode || "either";
     const role = (req.user?.role || "customer").toLowerCase();
 
     const stockCondition = buildStockCondition(mode, role);
-    const safeStockCondition = stockCondition || "TRUE";
-
-    if (!Array.isArray(categoryList) || categoryList.length === 0)
-      return res.json([]);
+    const useStock = stockCondition !== null;
 
     const r = await pool.query(`
       SELECT
@@ -582,9 +585,9 @@ app.post("/images/category/list", async (req, res) => {
         COALESCE(i.imageurl,'n/a') AS "ImageURL"
       FROM tblitemimages i
       JOIN tblproduct p ON p.productid = i.productid
-      JOIN vwstocksummary s ON s.productid = p.productid
+      ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.categoryname = ANY($1)
-        AND ${safeStockCondition}
+      ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
     `, [categoryList]);
 
@@ -594,6 +597,7 @@ app.post("/images/category/list", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 
 // ----------------------------------------------------------
 // STOCK  ❌ UNCHANGED
