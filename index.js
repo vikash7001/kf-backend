@@ -959,6 +959,103 @@ app.post("/sales", async (req, res) => {
     client.release();
   }
 });
+// ----------------------------------------------------------
+// STOCK TRANSFER  (ALIGNED WITH INCOMING / SALES)
+// ----------------------------------------------------------
+app.post("/stock/transfer", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { UserName, FromLocation, ToLocation, Rows } = req.body;
+
+    if (
+      !UserName ||
+      !FromLocation ||
+      !ToLocation ||
+      FromLocation === ToLocation ||
+      !Array.isArray(Rows) ||
+      Rows.length === 0
+    ) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    await client.query("BEGIN");
+
+    // Header (same pattern as incoming / sales)
+    const h = await client.query(`
+      INSERT INTO tblstocktransferheader
+      (fromlocation, tolocation, username)
+      VALUES ($1,$2,$3)
+      RETURNING transferid
+    `, [FromLocation, ToLocation, UserName]);
+
+    const transferId = h.rows[0].transferid;
+
+    for (const r of Rows) {
+
+      const p = await client.query(`
+        SELECT productid
+        FROM tblproduct
+        WHERE item=$1 AND seriesname=$2 AND categoryname=$3
+      `, [r.Item, r.SeriesName, r.CategoryName]);
+
+      if (p.rows.length === 0)
+        throw new Error(`Product not found: ${r.Item}`);
+
+      // OUT (source)
+      await client.query(`
+        INSERT INTO tblstockledger
+        (movementtype, referenceid, item, seriesname, categoryname,
+         quantity, locationname, username)
+        VALUES
+        ('OUT', $1, $2, $3, $4, $5, $6, $7)
+      `, [
+        transferId,
+        r.Item,
+        r.SeriesName,
+        r.CategoryName,
+        r.Quantity,
+        FromLocation,
+        UserName
+      ]);
+
+      // INCOMING (destination)
+      await client.query(`
+        INSERT INTO tblstockledger
+        (movementtype, referenceid, item, seriesname, categoryname,
+         quantity, locationname, username)
+        VALUES
+        ('Incoming', $1, $2, $3, $4, $5, $6, $7)
+      `, [
+        transferId,
+        r.Item,
+        r.SeriesName,
+        r.CategoryName,
+        r.Quantity,
+        ToLocation,
+        UserName
+      ]);
+    }
+
+    await client.query("COMMIT");
+
+    await logActivity({
+      username: UserName,
+      actionType: "STOCK_TRANSFER",
+      description: `${FromLocation} → ${ToLocation}`
+    });
+
+    res.json({ success: true });
+
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("STOCK TRANSFER ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.post("/admin/notify-app-update", async (req, res) => {
   try {
     await notifyAppUpdate();
