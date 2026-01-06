@@ -1066,6 +1066,31 @@ app.post("/admin/notify-app-update", async (req, res) => {
   }
 });
 // ----------------------------------------------------------
+// STEP 1: INCOMING LIST (READ-ONLY, VOUCHER LEVEL)
+// ----------------------------------------------------------
+app.get("/incoming/list", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        h.incomingheaderid AS "ID",
+        h.createdon        AS "Date",
+        h.location         AS "Location",
+        COALESCE(SUM(d.quantity), 0) AS "TotalQty"
+      FROM tblincomingheader h
+      JOIN tblincomingdetails d
+        ON d.incomingheaderid = h.incomingheaderid
+      GROUP BY h.incomingheaderid
+      ORDER BY h.incomingheaderid DESC
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("INCOMING LIST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
 // ----------------------------------------------------------
 app.get("/app/update", (req, res) => {
