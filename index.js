@@ -1073,13 +1073,13 @@ app.get("/incoming/list", async (req, res) => {
     const r = await pool.query(`
       SELECT
         h.incomingheaderid AS "ID",
-        h.createdon        AS "Date",
+        h.enterdat         AS "Date",
         h.location         AS "Location",
         COALESCE(SUM(d.quantity), 0) AS "TotalQty"
       FROM tblincomingheader h
       JOIN tblincomingdetails d
         ON d.incomingheaderid = h.incomingheaderid
-      GROUP BY h.incomingheaderid
+      GROUP BY h.incomingheaderid, h.enterdat, h.location
       ORDER BY h.incomingheaderid DESC
     `);
 
