@@ -1186,6 +1186,49 @@ app.get("/incoming/:id", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// STEP 5: VIEW SINGLE SALES VOUCHER (READ-ONLY)
+// ----------------------------------------------------------
+app.get("/sales/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const header = await pool.query(`
+      SELECT
+        salesid,
+        username,
+        locationname,
+        "date",
+        customer,
+        voucherno
+      FROM tblsalesheader
+      WHERE salesid = $1
+    `, [id]);
+
+    if (header.rows.length === 0)
+      return res.status(404).json({ error: "Not found" });
+
+    const rows = await pool.query(`
+      SELECT
+        item,
+        series,
+        category,
+        quantity
+      FROM tblsalesdetails
+      WHERE salesid = $1
+      ORDER BY salesdetailid
+    `, [id]);
+
+    res.json({
+      header: header.rows[0],
+      rows: rows.rows
+    });
+
+  } catch (e) {
+    console.error("VIEW SALES ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
