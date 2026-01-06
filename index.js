@@ -1115,6 +1115,36 @@ app.get("/sales/list", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// STEP 3: STOCK TRANSFER LIST (READ-ONLY, VOUCHER LEVEL)
+// ----------------------------------------------------------
+app.get("/stock/transfer/list", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        h.transferid   AS "ID",
+        h.createdon    AS "Date",
+        h.fromlocation AS "FromLocation",
+        h.tolocation   AS "ToLocation",
+        COALESCE(SUM(l.quantity), 0) AS "TotalQty"
+      FROM tblstocktransferheader h
+      LEFT JOIN tblstockledger l
+        ON l.referenceid = h.transferid
+       AND l.movementtype = 'Incoming'
+      GROUP BY
+        h.transferid,
+        h.createdon,
+        h.fromlocation,
+        h.tolocation
+      ORDER BY h.transferid DESC
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("TRANSFER LIST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
