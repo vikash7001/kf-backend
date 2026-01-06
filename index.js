@@ -1145,6 +1145,47 @@ app.get("/stock/transfer/list", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// STEP 4: VIEW SINGLE INCOMING VOUCHER (READ-ONLY)
+// ----------------------------------------------------------
+app.get("/incoming/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const header = await pool.query(`
+      SELECT
+        incomingheaderid,
+        username,
+        location,
+        enteredat
+      FROM tblincomingheader
+      WHERE incomingheaderid = $1
+    `, [id]);
+
+    if (header.rows.length === 0)
+      return res.status(404).json({ error: "Not found" });
+
+    const rows = await pool.query(`
+      SELECT
+        item,
+        seriesname,
+        categoryname,
+        quantity
+      FROM tblincomingdetails
+      WHERE incomingheaderid = $1
+      ORDER BY incomingdetailid
+    `, [id]);
+
+    res.json({
+      header: header.rows[0],
+      rows: rows.rows
+    });
+
+  } catch (e) {
+    console.error("VIEW INCOMING ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
