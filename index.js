@@ -1229,6 +1229,52 @@ app.get("/sales/:id", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
+// ----------------------------------------------------------
+app.get("/stock/transfer/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Header
+    const header = await pool.query(`
+      SELECT
+        transferid,
+        fromlocation,
+        tolocation,
+        username,
+        createdon
+      FROM tblstocktransferheader
+      WHERE transferid = $1
+    `, [id]);
+
+    if (header.rows.length === 0)
+      return res.status(404).json({ error: "Not found" });
+
+    // Rows (ledger entries)
+    const rows = await pool.query(`
+      SELECT
+        item,
+        seriesname,
+        categoryname,
+        quantity,
+        locationname,
+        movementtype
+      FROM tblstockledger
+      WHERE referenceid = $1
+      ORDER BY ledgerid
+    `, [id]);
+
+    res.json({
+      header: header.rows[0],
+      rows: rows.rows
+    });
+
+  } catch (e) {
+    console.error("VIEW TRANSFER ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
