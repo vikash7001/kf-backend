@@ -1091,6 +1091,30 @@ app.get("/incoming/list", async (req, res) => {
 });
 
 
+// ----------------------------------------------------------
+// STEP 2: SALES LIST (READ-ONLY, VOUCHER LEVEL)
+// ----------------------------------------------------------
+app.get("/sales/list", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        h.salesid      AS "ID",
+        h."date"       AS "Date",
+        h.customer     AS "Customer",
+        COALESCE(SUM(d.quantity), 0) AS "TotalQty"
+      FROM tblsalesheader h
+      JOIN tblsalesdetails d
+        ON d.salesid = h.salesid
+      GROUP BY h.salesid, h."date", h.customer
+      ORDER BY h.salesid DESC
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("SALES LIST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
