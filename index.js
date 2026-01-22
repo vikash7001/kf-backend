@@ -404,15 +404,25 @@ app.post("/image/save", async (req, res) => {
       return res.status(400).json({ error: "Item and ImageURL required" });
     }
 
+    console.log("🔥 IMAGE/SAVE CALLED", { Item, ImageURL });
+
+    // 1️⃣ Find product
     const p = await pool.query(
-      `SELECT productid FROM tblproduct WHERE item = $1`,
+      `SELECT productid, seriesname FROM tblproduct WHERE item = $1`,
       [Item]
     );
 
     if (p.rows.length === 0) {
+      console.warn("⚠️ PRODUCT NOT FOUND FOR IMAGE", Item);
       return res.status(404).json({ error: "Product not found" });
     }
 
+    const productId = p.rows[0].productid;
+    const seriesName = p.rows[0].seriesname;
+
+    console.log("✅ PRODUCT FOUND", { productId, seriesName });
+
+    // 2️⃣ Save / update image
     await pool.query(
       `
       INSERT INTO tblitemimages (productid, imageurl)
@@ -420,14 +430,30 @@ app.post("/image/save", async (req, res) => {
       ON CONFLICT (productid)
       DO UPDATE SET imageurl = EXCLUDED.imageurl
       `,
-      [p.rows[0].productid, ImageURL]
+      [productId, ImageURL]
     );
 
+    console.log("✅ IMAGE SAVED", { productId });
+
+    // 3️⃣ Send notification
+    console.log("📣 SENDING NEW IMAGE NOTIFICATION");
+
+    await notifyNewImage({
+      imageUrl: ImageURL,
+      seriesName: seriesName,
+      itemName: Item
+    });
+
+    console.log("✅ notifyNewImage CALLED SUCCESSFULLY");
+
     res.json({ success: true });
+
   } catch (e) {
+    console.error("❌ IMAGE/SAVE ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
+
 
 // ----------------------------------------------------------
 // IMAGE SAVE (NEW – PRODUCTID BASED, MANAGE IMAGES)
