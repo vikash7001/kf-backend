@@ -3,7 +3,6 @@ const { pool } = require("./db");
 
 /* ======================================================
    🔔 LOGIN NOTIFICATION (ADMIN ONLY)
-   Case-insensitive role check
 ====================================================== */
 async function notifyAdminLogin(fullname) {
   const admins = await pool.query(
@@ -32,7 +31,6 @@ async function notifyAdminLogin(fullname) {
 
 /* ======================================================
    🔔 SALES NOTIFICATION (ADMIN ONLY)
-   Case-insensitive role check
 ====================================================== */
 async function notifyAdminSale({
   createdByName,
@@ -40,8 +38,6 @@ async function notifyAdminSale({
   location,
   salesId
 }) {
-  console.log("🔥 notifyAdminSale ENTERED", salesId);
-
   const admins = await pool.query(
     "SELECT userid FROM tblusers WHERE UPPER(role) = 'ADMIN'"
   );
@@ -80,13 +76,10 @@ async function notifyAdminSale({
     },
     tokens
   });
-
-  console.log("🔥 SALES NOTIFICATION SENT");
 }
 
 /* ======================================================
    🔔 INCOMING NOTIFICATION (ADMIN + USER)
-   Case-insensitive role check
 ====================================================== */
 async function notifyIncoming({
   createdByName,
@@ -151,11 +144,50 @@ async function notifyAppUpdate() {
 }
 
 /* ======================================================
+   🔔 NEW IMAGE ADDED (ALL USERS)
+   Includes IMAGE + SERIES + ITEM
+====================================================== */
+async function notifyNewImage({
+  imageUrl,
+  seriesName,
+  itemName
+}) {
+  const tokensResult = await pool.query(
+    "SELECT token FROM tblfcm_tokens"
+  );
+
+  const tokens = tokensResult.rows
+    .map(r => r.token)
+    .filter(Boolean);
+
+  if (!tokens.length) return;
+
+await admin.messaging().sendEachForMulticast({
+  notification: {
+    title: "New Design Added ✨",
+    body: `Series: ${seriesName}\nItem: ${itemName}`,
+    image: imageUrl
+  },
+  data: {
+    type: "image",
+    series: seriesName,
+    item: itemName,
+    imageUrl: imageUrl
+  },
+  android: {
+    priority: "high"
+  },
+  tokens
+});
+
+}
+/* ======================================================
    ✅ EXPORTS
 ====================================================== */
 module.exports = {
   notifyAdminLogin,
   notifyAdminSale,
   notifyIncoming,
-  notifyAppUpdate
+  notifyAppUpdate,
+  notifyNewImage
 };
