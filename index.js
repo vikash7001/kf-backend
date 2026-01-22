@@ -4,10 +4,9 @@ const {
   notifyAdminLogin,
   notifyAdminSale,
   notifyIncoming,
-  notifyAppUpdate
+  notifyAppUpdate,
+  notifyNewImage
 } = require("./notificationService");
-
-
 
 // ----------------------------------------------------------
 // KARNI FASHIONS BACKEND — PostgreSQL (Supabase)
@@ -441,41 +440,41 @@ app.post("/images/save", async (req, res) => {
       return res.status(400).json({ error: "ProductID and ImageURL required" });
     }
 
-    await pool.query(`
+    // Save / update image
+    await pool.query(
+      `
       INSERT INTO tblItemImages (ProductID, ImageURL)
       VALUES ($1,$2)
       ON CONFLICT (ProductID)
       DO UPDATE SET ImageURL = EXCLUDED.ImageURL
-    `, [ProductID, ImageURL]);
+      `,
+      [ProductID, ImageURL]
+    );
+
+    // 🔔 FETCH ITEM + SERIES FOR NOTIFICATION
+    const info = await pool.query(
+      `
+      SELECT item, seriesname
+      FROM tblproduct
+      WHERE productid = $1
+      `,
+      [ProductID]
+    );
+
+    // 🔔 SEND NEW IMAGE NOTIFICATION
+    if (info.rows.length) {
+      await notifyNewImage({
+        imageUrl: ImageURL,
+        seriesName: info.rows[0].seriesname,
+        itemName: info.rows[0].item
+      });
+    }
 
     res.json({ success: true });
+
   } catch (err) {
     console.error("IMAGE SAVE ERROR:", err.message);
     res.status(500).json({ error: err.message });
-  }
-});
-app.get("/image/:productId", async (req, res) => {
-  try {
-    const { productId } = req.params;
-
-    const r = await pool.query(`
-      SELECT
-SELECT
-  i.productid   AS "ProductID",
-  COALESCE(i.imageurl,'n/a') AS "ImageURL"
-      FROM tblitemimages i
-      JOIN vwstocksummary s ON s.productid = i.productid
-      WHERE i.productid = $1
-        AND (s.jaipurqty > 5 OR s.kolkataqty > 5)
-    `, [productId]);
-
-    if (r.rows.length === 0)
-      return res.json({});
-
-    res.json(r.rows[0]);
-  } catch (e) {
-    console.error("IMAGE FETCH ERROR:", e.message);
-    res.status(500).json({ error: e.message });
   }
 });
 app.get("/images/series/:series", async (req, res) => {
