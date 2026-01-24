@@ -515,6 +515,35 @@ app.post("/images/save", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+app.post("/images/series/list-with-item", async (req, res) => {
+  try {
+    const seriesList = req.body;
+
+    if (!Array.isArray(seriesList) || seriesList.length === 0) {
+      return res.status(400).json({ error: "Series list required" });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        p.productid AS "ProductID",
+        p.item       AS "Item",
+        i.imageurl   AS "ImageURL"
+      FROM tblitemimages i
+      JOIN tblproduct p
+        ON p.productid = i.productid
+      WHERE p.seriesname = ANY($1)
+      `,
+      [seriesList]
+    );
+
+    res.json(result.rows);
+
+  } catch (e) {
+    console.error("❌ images/series/list-with-item error", e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get("/images/series/:series", async (req, res) => {
   try {
