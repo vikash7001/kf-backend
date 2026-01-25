@@ -1043,7 +1043,6 @@ app.post("/incoming", async (req, res) => {
 
 // ----------------------------------------------------------
 // SALES  ❌ UNCHANGED
-// ----------------------------------------------------------
 app.post("/sales", async (req, res) => {
   const client = await pool.connect();
 
@@ -1054,14 +1053,15 @@ app.post("/sales", async (req, res) => {
       !UserName ||
       !Location ||
       !Customer ||
-      !Array.isArray(Rows)
+      !Array.isArray(Rows) ||
+      Rows.length === 0
     ) {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
     await client.query("BEGIN");
 
-    // 1️⃣ Resolve userid + fullname from username
+    // 1️⃣ Resolve user
     const u = await client.query(
       `SELECT userid, fullname FROM tblusers WHERE username = $1`,
       [UserName]
@@ -1074,7 +1074,7 @@ app.post("/sales", async (req, res) => {
     const userId = u.rows[0].userid;
     const createdByName = u.rows[0].fullname;
 
-    // 2️⃣ Insert Sales Header
+    // 2️⃣ Sales Header
     const h = await client.query(
       `
       INSERT INTO tblsalesheader
@@ -1087,7 +1087,7 @@ app.post("/sales", async (req, res) => {
 
     const salesId = h.rows[0].salesid;
 
-    // 3️⃣ Process Sales Rows
+    // 3️⃣ Process rows
     for (const r of Rows) {
 
       const p = await client.query(
@@ -1105,7 +1105,7 @@ app.post("/sales", async (req, res) => {
 
       const productId = p.rows[0].productid;
 
-      // Sales details
+      // 3️⃣a Sales Details (ALWAYS one row)
       await client.query(
         `
         INSERT INTO tblsalesdetails
@@ -1115,25 +1115,59 @@ app.post("/sales", async (req, res) => {
         [salesId, productId, r.Item, r.Quantity, r.SeriesName, r.CategoryName]
       );
 
-      // Stock ledger
-      await client.query(
-        `
-        INSERT INTO tblstockledger
-        (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
-        VALUES ('OUT', $1, $2, $3, $4, $5, $6, $7)
-        `,
-        [
-          salesId,
-          r.Item,
-          r.SeriesName,
-          r.CategoryName,
-          r.Quantity,
-          Location,
-          UserName
-        ]
-      );
+      const hasSizeBreakup =
+        Location === "Jaipur" &&
+        r.SizeQty &&
+        typeof r.SizeQty === "object" &&
+        Object.keys(r.SizeQty).length > 0;
 
-      // Stock update
+      // 3️⃣b Stock Ledger
+      if (hasSizeBreakup) {
+        // 🔹 Size-wise OUT (online-enabled items)
+        for (const [size, sizeQty] of Object.entries(r.SizeQty)) {
+          if (!sizeQty || sizeQty <= 0) continue;
+
+          await client.query(
+            `
+            INSERT INTO tblstockledger
+            (movementtype, referenceid, item, seriesname, categoryname,
+             sizecode, quantity, locationname, username)
+            VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7,$8)
+            `,
+            [
+              salesId,
+              r.Item,
+              r.SeriesName,
+              r.CategoryName,
+              size,
+              sizeQty,
+              Location,
+              UserName
+            ]
+          );
+        }
+      } else {
+        // 🔹 Normal OUT
+        await client.query(
+          `
+          INSERT INTO tblstockledger
+          (movementtype, referenceid, item, seriesname, categoryname,
+           quantity, locationname, username)
+          VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7)
+          `,
+          [
+            salesId,
+            r.Item,
+            r.SeriesName,
+            r.CategoryName,
+            r.Quantity,
+            Location,
+            UserName
+          ]
+        );
+      }
+
+      // 3️⃣c Update summary stock (derived)
       await client.query(
         `
         UPDATE tblstock
@@ -1144,18 +1178,18 @@ app.post("/sales", async (req, res) => {
       );
     }
 
-    // 4️⃣ COMMIT TRANSACTION
+    // 4️⃣ Commit
     await client.query("COMMIT");
 
-    // 5️⃣ ACTIVITY LOG
+    // 5️⃣ Activity log
     await logActivity({
-      userId: userId,
+      userId,
       username: UserName,
       actionType: "SALES",
       description: "Sales entry created"
     });
 
-    // 🔔 6️⃣ SALES NOTIFICATION (ADMIN ONLY)
+    // 6️⃣ Notify admin (non-blocking)
     try {
       await notifyAdminSale({
         createdByName,
@@ -1165,7 +1199,6 @@ app.post("/sales", async (req, res) => {
       });
     } catch (err) {
       console.error("Sales notification failed:", err);
-      // do NOT block API
     }
 
     res.json({ success: true });
@@ -1178,6 +1211,7 @@ app.post("/sales", async (req, res) => {
     client.release();
   }
 });
+
 // ----------------------------------------------------------
 // STOCK TRANSFER  (ALIGNED WITH INCOMING / SALES)
 // ----------------------------------------------------------
