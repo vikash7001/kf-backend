@@ -1200,9 +1200,9 @@ app.post("/stock/transfer", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // -----------------------------
+    // ---------------------------------
     // HEADER
-    // -----------------------------
+    // ---------------------------------
     const h = await client.query(
       `
       INSERT INTO tblstocktransferheader
@@ -1215,12 +1215,10 @@ app.post("/stock/transfer", async (req, res) => {
 
     const transferId = h.rows[0].transferid;
 
-    // -----------------------------
+    // ---------------------------------
     // ROWS
-    // -----------------------------
+    // ---------------------------------
     for (const r of Rows) {
-
-      // 🔹 Resolve product
       const p = await client.query(
         `
         SELECT productid
@@ -1235,11 +1233,10 @@ app.post("/stock/transfer", async (req, res) => {
       }
 
       const productId = p.rows[0].productid;
-      const transferQty = Number(r.Quantity);
 
-      // -----------------------------
-      // STOCK LEDGER (OUT)
-      // -----------------------------
+      // -------------------------------
+      // TOTAL STOCK (UNCHANGED LOGIC)
+      // -------------------------------
       await client.query(
         `
         INSERT INTO tblstockledger
@@ -1253,15 +1250,12 @@ app.post("/stock/transfer", async (req, res) => {
           r.Item,
           r.SeriesName,
           r.CategoryName,
-          transferQty,
+          r.Quantity,
           FromLocation,
           UserName
         ]
       );
 
-      // -----------------------------
-      // STOCK LEDGER (IN)
-      // -----------------------------
       await client.query(
         `
         INSERT INTO tblstockledger
@@ -1275,74 +1269,34 @@ app.post("/stock/transfer", async (req, res) => {
           r.Item,
           r.SeriesName,
           r.CategoryName,
-          transferQty,
+          r.Quantity,
           ToLocation,
           UserName
         ]
       );
 
       // =====================================================
-      // ✅ STEP 1.2 — SIZE-WISE ONLINE STOCK MOVEMENT
+      // ONLINE SIZE STOCK (INDEPENDENT, BLIND APPLY)
       // =====================================================
       const jaipurInvolved =
         FromLocation === "Jaipur" || ToLocation === "Jaipur";
 
-      if (jaipurInvolved) {
+      if (jaipurInvolved && r.SizeQty && typeof r.SizeQty === "object") {
+        for (const [sizeCode, qty] of Object.entries(r.SizeQty)) {
+          let delta = 0;
 
-        const online = await client.query(
-          `
-          SELECT is_online
-          FROM tbl_online_design
-          WHERE productid = $1
-          `,
-          [productId]
-        );
+          if (FromLocation === "Jaipur") delta -= Number(qty);
+          if (ToLocation === "Jaipur") delta += Number(qty);
 
-        if (online.rows[0]?.is_online === true) {
-
-          const sizeRows = await client.query(
-            `
-            SELECT size_code, qty
-            FROM tbl_online_size_stock
-            WHERE productid = $1
-            ORDER BY size_code
-            `,
-            [productId]
-          );
-
-          if (sizeRows.rows.length === 0) {
-            throw new Error(`Online size stock missing for ${r.Item}`);
-          }
-
-          // 🔒 Validation: all sizes must have enough stock
-          if (FromLocation === "Jaipur") {
-            for (const s of sizeRows.rows) {
-              if (s.qty < transferQty) {
-                throw new Error(
-                  `Insufficient size stock (${s.size_code}) for ${r.Item}`
-                );
-              }
-            }
-          }
-
-          // 🔁 Uniform size-wise movement
-          for (const s of sizeRows.rows) {
-
-            let delta = 0;
-
-            if (FromLocation === "Jaipur") delta = -transferQty;
-            if (ToLocation === "Jaipur") delta = transferQty;
-
-            if (delta !== 0) {
-              await client.query(
-                `
-                UPDATE tbl_online_size_stock
-                SET qty = qty + $1
-                WHERE productid = $2 AND size_code = $3
-                `,
-                [delta, productId, s.size_code]
-              );
-            }
+          if (delta !== 0) {
+            await client.query(
+              `
+              UPDATE tbl_online_size_stock
+              SET qty = qty + $1
+              WHERE productid = $2 AND size_code = $3
+              `,
+              [delta, productId, sizeCode]
+            );
           }
         }
       }
@@ -1366,8 +1320,6 @@ app.post("/stock/transfer", async (req, res) => {
     client.release();
   }
 });
-
-
 
 
 app.post("/admin/notify-app-update", async (req, res) => {
