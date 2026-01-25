@@ -61,6 +61,16 @@ function buildStockCondition(mode, role) {
       return `(s.jaipurqty > 5 OR s.kolkataqty > 5)`;
   }
 }
+async function isOnlineEnabled(productid) {
+  const { data, error } = await supabase
+    .from("tbl_online_design")
+    .select("is_online")
+    .eq("productid", productid)
+    .single();
+
+  if (error) return false;
+  return data?.is_online === true;
+}
 
 // ----------------------------------------------------------
 // ROOT
@@ -1162,7 +1172,9 @@ app.post("/stock/transfer", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // Header (same pattern as incoming / sales)
+    // -----------------------------
+    // HEADER
+    // -----------------------------
     const h = await client.query(`
       INSERT INTO tblstocktransferheader
       (fromlocation, tolocation, username)
@@ -1172,8 +1184,12 @@ app.post("/stock/transfer", async (req, res) => {
 
     const transferId = h.rows[0].transferid;
 
+    // -----------------------------
+    // ROWS
+    // -----------------------------
     for (const r of Rows) {
 
+      // 🔹 Resolve product
       const p = await client.query(`
         SELECT productid
         FROM tblproduct
@@ -1183,7 +1199,44 @@ app.post("/stock/transfer", async (req, res) => {
       if (p.rows.length === 0)
         throw new Error(`Product not found: ${r.Item}`);
 
-      // OUT (source)
+      const productId = p.rows[0].productid;
+
+      // -----------------------------
+      // 🔐 STEP 1.1 — ONLINE SIZE ENFORCEMENT
+      // -----------------------------
+      const jaipurInvolved =
+        FromLocation === "Jaipur" || ToLocation === "Jaipur";
+
+      if (jaipurInvolved) {
+        const online = await client.query(`
+          SELECT is_online
+          FROM tbl_online_design
+          WHERE productid = $1
+        `, [productId]);
+
+        if (online.rows[0]?.is_online === true) {
+
+          if (!r.SizeQty || typeof r.SizeQty !== "object") {
+            throw new Error(
+              `Size details required for online-enabled item ${r.Item}`
+            );
+          }
+
+          const totalSizeQty = Object.values(r.SizeQty)
+            .map(Number)
+            .reduce((a, b) => a + b, 0);
+
+          if (totalSizeQty !== Number(r.Quantity)) {
+            throw new Error(
+              `Size total mismatch for ${r.Item} (expected ${r.Quantity}, got ${totalSizeQty})`
+            );
+          }
+        }
+      }
+
+      // -----------------------------
+      // OUT (SOURCE)
+      // -----------------------------
       await client.query(`
         INSERT INTO tblstockledger
         (movementtype, referenceid, item, seriesname, categoryname,
@@ -1200,7 +1253,9 @@ app.post("/stock/transfer", async (req, res) => {
         UserName
       ]);
 
-      // INCOMING (destination)
+      // -----------------------------
+      // IN (DESTINATION)
+      // -----------------------------
       await client.query(`
         INSERT INTO tblstockledger
         (movementtype, referenceid, item, seriesname, categoryname,
@@ -1231,11 +1286,12 @@ app.post("/stock/transfer", async (req, res) => {
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("STOCK TRANSFER ERROR:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(400).json({ error: e.message });
   } finally {
     client.release();
   }
 });
+
 
 app.post("/admin/notify-app-update", async (req, res) => {
   try {
