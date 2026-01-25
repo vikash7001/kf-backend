@@ -871,6 +871,34 @@ app.post("/online/sku/flipkart", async (req, res) => {
     client.release();
   }
 });
+app.get("/online/status-by-item/:item", async (req, res) => {
+  try {
+    const { item } = req.params;
+
+    const r = await pool.query(`
+      SELECT d.is_online, s.size_code
+      FROM tblproduct p
+      JOIN tbl_online_design d ON d.productid = p.productid
+      LEFT JOIN tbl_online_size_stock s ON s.productid = p.productid
+      WHERE p.item = $1
+    `, [item]);
+
+    if (r.rows.length === 0) {
+      return res.json({ is_online: false });
+    }
+
+    res.json({
+      is_online: r.rows[0].is_online === true,
+      sizes: r.rows
+        .filter(x => x.size_code)
+        .map(x => x.size_code)
+    });
+
+  } catch (e) {
+    console.error(e);
+    res.json({ is_online: false });
+  }
+});
 
 // ----------------------------------------------------------
 // INCOMING (PURCHASE)  ❌ UNCHANGED
