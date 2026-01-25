@@ -1600,6 +1600,16 @@ app.get("/stock/transfer/:id", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.get("/test/flipkart-token", async (req, res) => {
+  try {
+    const token = await getFlipkartAccessToken();
+    res.json({ ok: true, token: token.slice(0, 20) + "..." });
+  } catch (e) {
+    console.error(e.response?.data || e.message);
+    res.status(500).json({ error: "Token generation failed" });
+  }
+});
+
 
 // ----------------------------------------------------------
 // APP UPDATE (IN-APP UPDATE CHECK)
