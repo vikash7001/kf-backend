@@ -1224,46 +1224,14 @@ app.post("/stock/transfer", async (req, res) => {
         WHERE item=$1 AND seriesname=$2 AND categoryname=$3
       `, [r.Item, r.SeriesName, r.CategoryName]);
 
-      if (p.rows.length === 0)
+      if (p.rows.length === 0) {
         throw new Error(`Product not found: ${r.Item}`);
+      }
 
       const productId = p.rows[0].productid;
 
       // -----------------------------
-      // 🔐 STEP 1.1 — ONLINE SIZE ENFORCEMENT
-      // -----------------------------
-      const jaipurInvolved =
-        FromLocation === "Jaipur" || ToLocation === "Jaipur";
-
-      if (jaipurInvolved) {
-        const online = await client.query(`
-          SELECT is_online
-          FROM tbl_online_design
-          WHERE productid = $1
-        `, [productId]);
-
-        if (online.rows[0]?.is_online === true) {
-
-          if (!r.SizeQty || typeof r.SizeQty !== "object") {
-            throw new Error(
-              `Size details required for online-enabled item ${r.Item}`
-            );
-          }
-
-          const totalSizeQty = Object.values(r.SizeQty)
-            .map(Number)
-            .reduce((a, b) => a + b, 0);
-
-          if (totalSizeQty !== Number(r.Quantity)) {
-            throw new Error(
-              `Size total mismatch for ${r.Item} (expected ${r.Quantity}, got ${totalSizeQty})`
-            );
-          }
-        }
-      }
-
-      // -----------------------------
-      // OUT (SOURCE)
+      // STOCK LEDGER (OUT)
       // -----------------------------
       await client.query(`
         INSERT INTO tblstockledger
@@ -1282,7 +1250,7 @@ app.post("/stock/transfer", async (req, res) => {
       ]);
 
       // -----------------------------
-      // IN (DESTINATION)
+      // STOCK LEDGER (IN)
       // -----------------------------
       await client.query(`
         INSERT INTO tblstockledger
@@ -1299,6 +1267,73 @@ app.post("/stock/transfer", async (req, res) => {
         ToLocation,
         UserName
       ]);
+
+      // =====================================================
+      // 🔥 STEP 1.2 — SIZE-WISE ONLINE STOCK MOVEMENT
+      // =====================================================
+      const jaipurInvolved =
+        FromLocation === "Jaipur" || ToLocation === "Jaipur";
+
+      if (jaipurInvolved) {
+
+        const online = await client.query(`
+          SELECT is_online
+          FROM tbl_online_design
+          WHERE productid = $1
+        `, [productId]);
+
+        if (online.rows[0]?.is_online === true) {
+
+          // Fetch existing size stock
+          const sizeRows = await client.query(`
+            SELECT size_code, qty
+            FROM tbl_online_size_stock
+            WHERE productid = $1
+            ORDER BY size_code
+          `, [productId]);
+
+          if (sizeRows.rows.length === 0) {
+            throw new Error(
+              `Online size stock missing for ${r.Item}`
+            );
+          }
+
+          let remainingQty = Number(r.Quantity);
+
+          for (const s of sizeRows.rows) {
+
+            if (remainingQty <= 0) break;
+
+            let delta = 0;
+
+            if (FromLocation === "Jaipur") {
+              // Deduct from Jaipur online stock
+              delta = -Math.min(s.qty, remainingQty);
+            }
+
+            if (ToLocation === "Jaipur") {
+              // Add to Jaipur online stock
+              delta = Math.min(s.qty, remainingQty);
+            }
+
+            if (delta !== 0) {
+              await client.query(`
+                UPDATE tbl_online_size_stock
+                SET qty = qty + $1
+                WHERE productid = $2 AND size_code = $3
+              `, [delta, productId, s.size_code]);
+
+              remainingQty -= Math.abs(delta);
+            }
+          }
+
+          if (remainingQty > 0) {
+            throw new Error(
+              `Insufficient online size stock for ${r.Item}`
+            );
+          }
+        }
+      }
     }
 
     await client.query("COMMIT");
@@ -1319,6 +1354,7 @@ app.post("/stock/transfer", async (req, res) => {
     client.release();
   }
 });
+
 
 
 app.post("/admin/notify-app-update", async (req, res) => {
