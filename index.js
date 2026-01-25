@@ -1203,12 +1203,15 @@ app.post("/stock/transfer", async (req, res) => {
     // -----------------------------
     // HEADER
     // -----------------------------
-    const h = await client.query(`
+    const h = await client.query(
+      `
       INSERT INTO tblstocktransferheader
       (fromlocation, tolocation, username)
       VALUES ($1,$2,$3)
       RETURNING transferid
-    `, [FromLocation, ToLocation, UserName]);
+      `,
+      [FromLocation, ToLocation, UserName]
+    );
 
     const transferId = h.rows[0].transferid;
 
@@ -1218,126 +1221,128 @@ app.post("/stock/transfer", async (req, res) => {
     for (const r of Rows) {
 
       // 🔹 Resolve product
-      const p = await client.query(`
+      const p = await client.query(
+        `
         SELECT productid
         FROM tblproduct
         WHERE item=$1 AND seriesname=$2 AND categoryname=$3
-      `, [r.Item, r.SeriesName, r.CategoryName]);
+        `,
+        [r.Item, r.SeriesName, r.CategoryName]
+      );
 
       if (p.rows.length === 0) {
         throw new Error(`Product not found: ${r.Item}`);
       }
 
       const productId = p.rows[0].productid;
+      const transferQty = Number(r.Quantity);
 
       // -----------------------------
       // STOCK LEDGER (OUT)
       // -----------------------------
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO tblstockledger
         (movementtype, referenceid, item, seriesname, categoryname,
          quantity, locationname, username)
         VALUES
         ('OUT', $1, $2, $3, $4, $5, $6, $7)
-      `, [
-        transferId,
-        r.Item,
-        r.SeriesName,
-        r.CategoryName,
-        r.Quantity,
-        FromLocation,
-        UserName
-      ]);
+        `,
+        [
+          transferId,
+          r.Item,
+          r.SeriesName,
+          r.CategoryName,
+          transferQty,
+          FromLocation,
+          UserName
+        ]
+      );
 
       // -----------------------------
       // STOCK LEDGER (IN)
       // -----------------------------
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO tblstockledger
         (movementtype, referenceid, item, seriesname, categoryname,
          quantity, locationname, username)
         VALUES
         ('Incoming', $1, $2, $3, $4, $5, $6, $7)
-      `, [
-        transferId,
-        r.Item,
-        r.SeriesName,
-        r.CategoryName,
-        r.Quantity,
-        ToLocation,
-        UserName
-      ]);
+        `,
+        [
+          transferId,
+          r.Item,
+          r.SeriesName,
+          r.CategoryName,
+          transferQty,
+          ToLocation,
+          UserName
+        ]
+      );
 
       // =====================================================
-      // 🔥 STEP 1.2 — SIZE-WISE ONLINE STOCK MOVEMENT
+      // ✅ STEP 1.2 — SIZE-WISE ONLINE STOCK MOVEMENT
       // =====================================================
-      // =====================================================
-// ✅ STEP 1.2 — CORRECT SIZE-WISE STOCK MOVEMENT
-// =====================================================
-const jaipurInvolved =
-  FromLocation === "Jaipur" || ToLocation === "Jaipur";
+      const jaipurInvolved =
+        FromLocation === "Jaipur" || ToLocation === "Jaipur";
 
-if (jaipurInvolved) {
+      if (jaipurInvolved) {
 
-  const online = await client.query(`
-    SELECT is_online
-    FROM tbl_online_design
-    WHERE productid = $1
-  `, [productId]);
-
-  if (online.rows[0]?.is_online === true) {
-
-    const sizeRows = await client.query(`
-      SELECT size_code, qty
-      FROM tbl_online_size_stock
-      WHERE productid = $1
-      ORDER BY size_code
-    `, [productId]);
-
-    if (sizeRows.rows.length === 0)认为{
-      throw new Error(`Online size stock missing for ${r.Item}`);
-    }
-
-    const transferQty = Number(r.Quantity);
-
-    // 🔒 Validation: all sizes must have enough stock
-    for (const s of sizeRows.rows) {
-      if (FromLocation === "Jaipur" && s.qty < transferQty) {
-        throw new Error(
-          `Insufficient size stock (${s.size_code}) for ${r.Item}`
+        const online = await client.query(
+          `
+          SELECT is_online
+          FROM tbl_online_design
+          WHERE productid = $1
+          `,
+          [productId]
         );
-      }
-    }
 
-    // 🔁 Apply uniform size movement
-    for (const s of sizeRows.rows) {
+        if (online.rows[0]?.is_online === true) {
 
-      let delta = 0;
+          const sizeRows = await client.query(
+            `
+            SELECT size_code, qty
+            FROM tbl_online_size_stock
+            WHERE productid = $1
+            ORDER BY size_code
+            `,
+            [productId]
+          );
 
-      if (FromLocation === "Jaipur") {
-        delta = -transferQty;
-      }
+          if (sizeRows.rows.length === 0) {
+            throw new Error(`Online size stock missing for ${r.Item}`);
+          }
 
-      if (ToLocation === "Jaipur") {
-        delta = transferQty;
-      }
+          // 🔒 Validation: all sizes must have enough stock
+          if (FromLocation === "Jaipur") {
+            for (const s of sizeRows.rows) {
+              if (s.qty < transferQty) {
+                throw new Error(
+                  `Insufficient size stock (${s.size_code}) for ${r.Item}`
+                );
+              }
+            }
+          }
 
-      if (delta !== 0) {
-        await client.query(`
-          UPDATE tbl_online_size_stock
-          SET qty = qty + $1
-          WHERE productid = $2 AND size_code = $3
-        `, [delta, productId, s.size_code]);
-      }
-    }
-  }
-}
+          // 🔁 Uniform size-wise movement
+          for (const s of sizeRows.rows) {
 
+            let delta = 0;
 
-          if (remainingQty > 0) {
-            throw new Error(
-              `Insufficient online size stock for ${r.Item}`
-            );
+            if (FromLocation === "Jaipur") delta = -transferQty;
+            if (ToLocation === "Jaipur") delta = transferQty;
+
+            if (delta !== 0) {
+              await client.query(
+                `
+                UPDATE tbl_online_size_stock
+                SET qty = qty + $1
+                WHERE productid = $2 AND size_code = $3
+                `,
+                [delta, productId, s.size_code]
+              );
+            }
           }
         }
       }
@@ -1361,6 +1366,7 @@ if (jaipurInvolved) {
     client.release();
   }
 });
+
 
 
 
