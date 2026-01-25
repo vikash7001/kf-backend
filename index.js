@@ -814,6 +814,53 @@ app.post("/online/config", async (req, res) => {
     client.release();
   }
 });
+app.get("/online/sku/flipkart", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      select productid, size_code, sku_code
+      from tbl_online_sku
+      where marketplace = 'FLIPKART'
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("GET FLIPKART SKU ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/online/sku/flipkart", async (req, res) => {
+  const rows = req.body; // array of { productid, size_code, sku_code }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    for (const r of rows) {
+      await client.query(
+        `
+        insert into tbl_online_sku
+          (productid, size_code, marketplace, sku_code)
+        values ($1, $2, 'FLIPKART', $3)
+        on conflict (productid, size_code, marketplace)
+        do update set
+          sku_code = excluded.sku_code,
+          updated_at = now()
+        `,
+        [r.productid, r.size_code, r.sku_code || null]
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("SAVE FLIPKART SKU ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
 
 // ----------------------------------------------------------
 // INCOMING (PURCHASE)  ❌ UNCHANGED
