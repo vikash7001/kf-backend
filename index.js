@@ -1271,61 +1271,68 @@ app.post("/stock/transfer", async (req, res) => {
       // =====================================================
       // 🔥 STEP 1.2 — SIZE-WISE ONLINE STOCK MOVEMENT
       // =====================================================
-      const jaipurInvolved =
-        FromLocation === "Jaipur" || ToLocation === "Jaipur";
+      // =====================================================
+// ✅ STEP 1.2 — CORRECT SIZE-WISE STOCK MOVEMENT
+// =====================================================
+const jaipurInvolved =
+  FromLocation === "Jaipur" || ToLocation === "Jaipur";
 
-      if (jaipurInvolved) {
+if (jaipurInvolved) {
 
-        const online = await client.query(`
-          SELECT is_online
-          FROM tbl_online_design
-          WHERE productid = $1
-        `, [productId]);
+  const online = await client.query(`
+    SELECT is_online
+    FROM tbl_online_design
+    WHERE productid = $1
+  `, [productId]);
 
-        if (online.rows[0]?.is_online === true) {
+  if (online.rows[0]?.is_online === true) {
 
-          // Fetch existing size stock
-          const sizeRows = await client.query(`
-            SELECT size_code, qty
-            FROM tbl_online_size_stock
-            WHERE productid = $1
-            ORDER BY size_code
-          `, [productId]);
+    const sizeRows = await client.query(`
+      SELECT size_code, qty
+      FROM tbl_online_size_stock
+      WHERE productid = $1
+      ORDER BY size_code
+    `, [productId]);
 
-          if (sizeRows.rows.length === 0) {
-            throw new Error(
-              `Online size stock missing for ${r.Item}`
-            );
-          }
+    if (sizeRows.rows.length === 0)认为{
+      throw new Error(`Online size stock missing for ${r.Item}`);
+    }
 
-          let remainingQty = Number(r.Quantity);
+    const transferQty = Number(r.Quantity);
 
-          for (const s of sizeRows.rows) {
+    // 🔒 Validation: all sizes must have enough stock
+    for (const s of sizeRows.rows) {
+      if (FromLocation === "Jaipur" && s.qty < transferQty) {
+        throw new Error(
+          `Insufficient size stock (${s.size_code}) for ${r.Item}`
+        );
+      }
+    }
 
-            if (remainingQty <= 0) break;
+    // 🔁 Apply uniform size movement
+    for (const s of sizeRows.rows) {
 
-            let delta = 0;
+      let delta = 0;
 
-            if (FromLocation === "Jaipur") {
-              // Deduct from Jaipur online stock
-              delta = -Math.min(s.qty, remainingQty);
-            }
+      if (FromLocation === "Jaipur") {
+        delta = -transferQty;
+      }
 
-            if (ToLocation === "Jaipur") {
-              // Add to Jaipur online stock
-              delta = Math.min(s.qty, remainingQty);
-            }
+      if (ToLocation === "Jaipur") {
+        delta = transferQty;
+      }
 
-            if (delta !== 0) {
-              await client.query(`
-                UPDATE tbl_online_size_stock
-                SET qty = qty + $1
-                WHERE productid = $2 AND size_code = $3
-              `, [delta, productId, s.size_code]);
+      if (delta !== 0) {
+        await client.query(`
+          UPDATE tbl_online_size_stock
+          SET qty = qty + $1
+          WHERE productid = $2 AND size_code = $3
+        `, [delta, productId, s.size_code]);
+      }
+    }
+  }
+}
 
-              remainingQty -= Math.abs(delta);
-            }
-          }
 
           if (remainingQty > 0) {
             throw new Error(
