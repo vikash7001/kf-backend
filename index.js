@@ -1132,23 +1132,21 @@ app.post("/admin/notify-app-update", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.get('/online/config', async (req, res) => {
+app.get("/online/config", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('vw_online_config')
-      .select('*');
+    const r = await pool.query(`
+      SELECT *
+      FROM vw_online_config
+      ORDER BY item
+    `);
 
-    if (error) {
-      console.error('Supabase error:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    res.json(data);
+    res.json(r.rows);
   } catch (e) {
-    console.error('Server error:', e);
-    res.status(500).json({ error: 'Failed to load online config' });
+    console.error("ONLINE CONFIG ERROR:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
+
 
 // ----------------------------------------------------------
 // STEP 1: INCOMING LIST (READ-ONLY, VOUCHER LEVEL)
