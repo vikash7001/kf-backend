@@ -1087,7 +1087,7 @@ app.post("/sales", async (req, res) => {
 
     const salesId = h.rows[0].salesid;
 
-    // 3️⃣ Process rows
+    // 3️⃣ Rows
     for (const r of Rows) {
 
       const p = await client.query(
@@ -1105,7 +1105,7 @@ app.post("/sales", async (req, res) => {
 
       const productId = p.rows[0].productid;
 
-      // 3️⃣a Sales Details (ALWAYS one row)
+      // 3️⃣a Sales details
       await client.query(
         `
         INSERT INTO tblsalesdetails
@@ -1115,59 +1115,26 @@ app.post("/sales", async (req, res) => {
         [salesId, productId, r.Item, r.Quantity, r.SeriesName, r.CategoryName]
       );
 
-      const hasSizeBreakup =
-        Location === "Jaipur" &&
-        r.SizeQty &&
-        typeof r.SizeQty === "object" &&
-        Object.keys(r.SizeQty).length > 0;
+      // 3️⃣b Stock ledger (TOTAL stock — unchanged)
+      await client.query(
+        `
+        INSERT INTO tblstockledger
+        (movementtype, referenceid, item, seriesname, categoryname,
+         quantity, locationname, username)
+        VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7)
+        `,
+        [
+          salesId,
+          r.Item,
+          r.SeriesName,
+          r.CategoryName,
+          r.Quantity,
+          Location,
+          UserName
+        ]
+      );
 
-      // 3️⃣b Stock Ledger
-      if (hasSizeBreakup) {
-        // 🔹 Size-wise OUT (online-enabled items)
-        for (const [size, sizeQty] of Object.entries(r.SizeQty)) {
-          if (!sizeQty || sizeQty <= 0) continue;
-
-          await client.query(
-            `
-            INSERT INTO tblstockledger
-            (movementtype, referenceid, item, seriesname, categoryname,
-             sizecode, quantity, locationname, username)
-            VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7,$8)
-            `,
-            [
-              salesId,
-              r.Item,
-              r.SeriesName,
-              r.CategoryName,
-              size,
-              sizeQty,
-              Location,
-              UserName
-            ]
-          );
-        }
-      } else {
-        // 🔹 Normal OUT
-        await client.query(
-          `
-          INSERT INTO tblstockledger
-          (movementtype, referenceid, item, seriesname, categoryname,
-           quantity, locationname, username)
-          VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7)
-          `,
-          [
-            salesId,
-            r.Item,
-            r.SeriesName,
-            r.CategoryName,
-            r.Quantity,
-            Location,
-            UserName
-          ]
-        );
-      }
-
-      // 3️⃣c Update summary stock (derived)
+      // 3️⃣c Summary stock (derived)
       await client.query(
         `
         UPDATE tblstock
@@ -1176,12 +1143,30 @@ app.post("/sales", async (req, res) => {
         `,
         [r.Quantity, productId]
       );
+
+      // =====================================================
+      // ONLINE SIZE STOCK (EXACTLY LIKE STOCK TRANSFER)
+      // =====================================================
+      if (
+        Location === "Jaipur" &&
+        r.SizeQty &&
+        typeof r.SizeQty === "object"
+      ) {
+        for (const [sizeCode, qty] of Object.entries(r.SizeQty)) {
+          await client.query(
+            `
+            UPDATE tbl_online_size_stock
+            SET qty = qty - $1
+            WHERE productid = $2 AND size_code = $3
+            `,
+            [Number(qty), productId, sizeCode]
+          );
+        }
+      }
     }
 
-    // 4️⃣ Commit
     await client.query("COMMIT");
 
-    // 5️⃣ Activity log
     await logActivity({
       userId,
       username: UserName,
@@ -1189,7 +1174,6 @@ app.post("/sales", async (req, res) => {
       description: "Sales entry created"
     });
 
-    // 6️⃣ Notify admin (non-blocking)
     try {
       await notifyAdminSale({
         createdByName,
@@ -1205,12 +1189,13 @@ app.post("/sales", async (req, res) => {
 
   } catch (e) {
     await client.query("ROLLBACK");
-    console.error("Sales error:", e);
+    console.error("Sales error:", e.message);
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
   }
 });
+
 
 // ----------------------------------------------------------
 // STOCK TRANSFER  (ALIGNED WITH INCOMING / SALES)
