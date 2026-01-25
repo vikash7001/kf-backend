@@ -747,6 +747,73 @@ app.get("/stockledger/:itemCode", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/online/config", async (req, res) => {
+  const { productid, is_online, enabledSizes, sizeQty } = req.body;
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1️⃣ Upsert online flag
+    await client.query(
+      `
+      insert into tbl_online_design (productid, is_online)
+      values ($1, $2)
+      on conflict (productid)
+      do update set
+        is_online = excluded.is_online,
+        updated_at = now()
+      `,
+      [productid, is_online]
+    );
+
+    // Clear previous sizes & stock
+    await client.query(
+      `delete from tbl_online_design_sizes where productid = $1`,
+      [productid]
+    );
+    await client.query(
+      `delete from tbl_online_size_stock where productid = $1`,
+      [productid]
+    );
+
+    // 2️⃣ Insert enabled sizes
+    if (is_online && Array.isArray(enabledSizes)) {
+      for (const sz of enabledSizes) {
+        await client.query(
+          `
+          insert into tbl_online_design_sizes (productid, size_code)
+          values ($1, $2)
+          `,
+          [productid, sz]
+        );
+      }
+    }
+
+    // 3️⃣ Insert size-wise stock (Jaipur only)
+    if (is_online && sizeQty) {
+      for (const [sz, qty] of Object.entries(sizeQty)) {
+        await client.query(
+          `
+          insert into tbl_online_size_stock (productid, size_code, qty)
+          values ($1, $2, $3)
+          `,
+          [productid, sz, qty]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("ONLINE CONFIG SAVE ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
 
 // ----------------------------------------------------------
 // INCOMING (PURCHASE)  ❌ UNCHANGED
