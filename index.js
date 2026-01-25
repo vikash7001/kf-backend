@@ -939,7 +939,7 @@ app.post("/incoming", async (req, res) => {
 
     const headerId = h.rows[0].incomingheaderid;
 
-    // 3️⃣ Process Incoming Rows
+    // 3️⃣ Process Rows
     for (const r of Rows) {
 
       const p = await client.query(
@@ -964,6 +964,7 @@ app.post("/incoming", async (req, res) => {
             )
           ).rows[0].productid;
 
+      // Incoming details
       await client.query(
         `
         INSERT INTO tblincomingdetails
@@ -973,11 +974,13 @@ app.post("/incoming", async (req, res) => {
         [headerId, productId, r.Item, r.SeriesName, r.CategoryName, r.Quantity]
       );
 
+      // Stock ledger (TOTAL)
       await client.query(
         `
         INSERT INTO tblstockledger
-        (movementtype, referenceid, item, seriesname, categoryname, quantity, locationname, username)
-        VALUES ('Incoming', $1, $2, $3, $4, $5, $6, $7)
+        (movementtype, referenceid, item, seriesname, categoryname,
+         quantity, locationname, username)
+        VALUES ('Incoming', $1,$2,$3,$4,$5,$6,$7)
         `,
         [
           headerId,
@@ -990,6 +993,7 @@ app.post("/incoming", async (req, res) => {
         ]
       );
 
+      // Stock summary
       await client.query(
         `
         INSERT INTO tblstock
@@ -1006,12 +1010,31 @@ app.post("/incoming", async (req, res) => {
           r.Quantity
         ]
       );
+
+      // =====================================================
+      // ONLINE SIZE STOCK (SAME PATTERN AS STOCK TRANSFER)
+      // =====================================================
+      if (
+        Location === "Jaipur" &&
+        r.SizeQty &&
+        typeof r.SizeQty === "object"
+      ) {
+        for (const [sizeCode, qty] of Object.entries(r.SizeQty)) {
+          await client.query(
+            `
+            UPDATE tbl_online_size_stock
+            SET qty = qty + $1
+            WHERE productid = $2 AND size_code = $3
+            `,
+            [Number(qty), productId, sizeCode]
+          );
+        }
+      }
     }
 
-    // 4️⃣ Commit
     await client.query("COMMIT");
 
-    // 5️⃣ Activity log
+    // Activity log
     await logActivity({
       userId: UserID,
       username: UserName,
@@ -1019,7 +1042,7 @@ app.post("/incoming", async (req, res) => {
       description: "Incoming entry created"
     });
 
-    // 🔔 6️⃣ INCOMING NOTIFICATION (ADMIN + USER)
+    // Notification
     try {
       await notifyIncoming({
         createdByName,
@@ -1034,12 +1057,13 @@ app.post("/incoming", async (req, res) => {
 
   } catch (e) {
     await client.query("ROLLBACK");
-    console.error("Incoming error:", e);
+    console.error("Incoming error:", e.message);
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
   }
 });
+
 
 // ----------------------------------------------------------
 // SALES  ❌ UNCHANGED
