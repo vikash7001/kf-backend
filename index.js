@@ -212,6 +212,14 @@ app.post("/signup", async (req, res) => {
     });
   }
 });
+app.get("/spapi/ping", async (req, res) => {
+  try {
+    // later we’ll call Amazon Orders or Reports here
+    res.json({ ok: true, msg: "SP API env loaded" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // PRODUCTS
