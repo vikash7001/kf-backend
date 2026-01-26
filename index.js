@@ -17,9 +17,8 @@ const cors = require("cors");
 const admin = require("firebase-admin");
 const { pool } = require("./db");
 const { getFlipkartAccessToken } = require("./services/flipkartAuth");
-
 const app = express();
-
+const SellingPartnerAPI = require("amazon-sp-api");
 
 // ----------------------------------------------------------
 // MIDDLEWARE
@@ -81,6 +80,35 @@ app.get("/", (_, res) => {
 });
 app.get("/health", (req, res) => {
   res.status(200).send("ok");
+});
+app.get("/spapi/marketplaces", async (req, res) => {
+  try {
+    const sp = new SellingPartnerAPI({
+      region: "na",
+      refresh_token: process.env.SP_REFRESH_TOKEN,
+      credentials: {
+        SELLING_PARTNER_APP_CLIENT_ID: process.env.LWA_CLIENT_ID,
+        SELLING_PARTNER_APP_CLIENT_SECRET: process.env.LWA_CLIENT_SECRET,
+        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+        AWS_ROLE_ARN: process.env.AWS_ROLE_ARN
+      }
+    });
+
+    const data = await sp.callAPI({
+      operation: "getMarketplaceParticipations",
+      endpoint: "sellers"
+    });
+
+    res.json(data);
+
+  } catch (e) {
+    console.error("SPAPI ERROR:", e);
+    res.status(500).json({
+      error: "SP-API call failed",
+      details: e.message
+    });
+  }
 });
 
 // ----------------------------------------------------------
@@ -212,14 +240,7 @@ app.post("/signup", async (req, res) => {
     });
   }
 });
-app.get("/spapi/ping", async (req, res) => {
-  try {
-    // later we’ll call Amazon Orders or Reports here
-    res.json({ ok: true, msg: "SP API env loaded" });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+
 
 // ----------------------------------------------------------
 // PRODUCTS
