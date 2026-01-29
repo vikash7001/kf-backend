@@ -421,30 +421,41 @@ app.post("/fcm/register", async (req, res) => {
 // IMAGES (MANAGE IMAGE PAGE)
 // ----------------------------------------------------------
 app.get("/images/list", async (_, res) => {
-  const r = await pool.query(`
-    SELECT
-      P.productid AS "ProductID",
-      P.item AS "Item",
-      COALESCE(I.imageurl,'n/a') AS "ImageURL"
-    FROM tblproduct P
-    LEFT JOIN tblitemimages I ON I.productid = P.productid
-    ORDER BY P.item
-  `);
-  res.json(r.rows);
+  try {
+    const r = await pool.query(`
+      SELECT
+        P.productid               AS "ProductID",
+        P.item                    AS "Item",
+        COALESCE(I.fabric, '')    AS "Fabric",
+        COALESCE(I.rate, '')      AS "Rate",
+        COALESCE(I.imageurl, '')  AS "ImageURL"
+      FROM tblproduct P
+      LEFT JOIN tblitemimages I
+        ON I.productid = P.productid
+      ORDER BY P.item
+    `);
+
+    res.json(r.rows);
+
+  } catch (e) {
+    console.error("❌ /images/list error:", e);
+    res.status(500).json({ error: e.message });
+  }
 });
+
 
 // ----------------------------------------------------------
 // IMAGE SAVE (OLD – ITEM BASED)  ✅ RESTORED
 // ----------------------------------------------------------
 app.post("/image/save", async (req, res) => {
   try {
-    const { Item, ImageURL } = req.body;
+    const { Item, ImageURL, Fabric, Rate } = req.body;
 
-    if (!Item || !ImageURL) {
-      return res.status(400).json({ error: "Item and ImageURL required" });
+    if (!Item) {
+      return res.status(400).json({ error: "Item required" });
     }
 
-    console.log("🔥 IMAGE/SAVE CALLED", { Item, ImageURL });
+    console.log("🔥 IMAGE/SAVE CALLED", { Item, ImageURL, Fabric, Rate });
 
     // 1️⃣ Find product
     const p = await pool.query(
@@ -453,38 +464,32 @@ app.post("/image/save", async (req, res) => {
     );
 
     if (p.rows.length === 0) {
-      console.warn("⚠️ PRODUCT NOT FOUND FOR IMAGE", Item);
       return res.status(404).json({ error: "Product not found" });
     }
 
     const productId = p.rows[0].productid;
     const seriesName = p.rows[0].seriesname;
 
-    console.log("✅ PRODUCT FOUND", { productId, seriesName });
-
-    // 2️⃣ Save / update image
+    // 2️⃣ Insert / Update image + fabric + rate
     await pool.query(
       `
-      INSERT INTO tblitemimages (productid, imageurl)
-      VALUES ($1,$2)
+      INSERT INTO tblitemimages (productid, imageurl, fabric, rate)
+      VALUES ($1,$2,$3,$4)
       ON CONFLICT (productid)
-      DO UPDATE SET imageurl = EXCLUDED.imageurl
+      DO UPDATE SET
+        imageurl = EXCLUDED.imageurl,
+        fabric   = EXCLUDED.fabric,
+        rate     = EXCLUDED.rate
       `,
-      [productId, ImageURL]
+      [productId, ImageURL || '', Fabric || '', Rate || '']
     );
 
-    console.log("✅ IMAGE SAVED", { productId });
-
-    // 3️⃣ Send notification
-    console.log("📣 SENDING NEW IMAGE NOTIFICATION");
-
+    // 3️⃣ Notify
     await notifyNewImage({
       imageUrl: ImageURL,
       seriesName: seriesName,
       itemName: Item
     });
-
-    console.log("✅ notifyNewImage CALLED SUCCESSFULLY");
 
     res.json({ success: true });
 
