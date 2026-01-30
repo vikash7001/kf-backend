@@ -1263,28 +1263,14 @@ app.post("/stock/transfer", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    ...
+    const { UserName, FromLocation, ToLocation, Rows } = req.body;
+
+    if (!UserName || !FromLocation || !ToLocation || !Array.isArray(Rows))
+      return res.status(400).json({ error: "Invalid payload" });
+
     await client.query("BEGIN");
 
-    // header insert
-    // row inserts
-
-    await client.query("COMMIT");   // ✅ THIS WAS MISSING
-
-    res.json({ success: true });
-  } catch (err) {
-    await client.query("ROLLBACK"); // ✅ IMPORTANT
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release(); // ✅ ABSOLUTELY REQUIRED
-  }
-});
-
-
-    // ---------------------------------
     // HEADER
-    // ---------------------------------
     const h = await client.query(
       `
       INSERT INTO tblstocktransferheader
@@ -1297,9 +1283,7 @@ app.post("/stock/transfer", async (req, res) => {
 
     const transferId = h.rows[0].transferid;
 
-    // ---------------------------------
     // ROWS
-    // ---------------------------------
     for (const r of Rows) {
       const p = await client.query(
         `
@@ -1310,22 +1294,18 @@ app.post("/stock/transfer", async (req, res) => {
         [r.Item, r.SeriesName, r.CategoryName]
       );
 
-      if (p.rows.length === 0) {
+      if (!p.rows.length)
         throw new Error(`Product not found: ${r.Item}`);
-      }
 
       const productId = p.rows[0].productid;
 
-      // -------------------------------
-      // TOTAL STOCK (UNCHANGED LOGIC)
-      // -------------------------------
+      // OUT
       await client.query(
         `
         INSERT INTO tblstockledger
         (movementtype, referenceid, item, seriesname, categoryname,
          quantity, locationname, username)
-        VALUES
-        ('OUT', $1, $2, $3, $4, $5, $6, $7)
+        VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7)
         `,
         [
           transferId,
@@ -1338,13 +1318,13 @@ app.post("/stock/transfer", async (req, res) => {
         ]
       );
 
+      // IN
       await client.query(
         `
         INSERT INTO tblstockledger
         (movementtype, referenceid, item, seriesname, categoryname,
          quantity, locationname, username)
-        VALUES
-        ('Incoming', $1, $2, $3, $4, $5, $6, $7)
+        VALUES ('Incoming',$1,$2,$3,$4,$5,$6,$7)
         `,
         [
           transferId,
@@ -1356,6 +1336,27 @@ app.post("/stock/transfer", async (req, res) => {
           UserName
         ]
       );
+    }
+
+    await client.query("COMMIT");
+
+    await logActivity({
+      username: UserName,
+      actionType: "STOCK_TRANSFER",
+      description: `${FromLocation} → ${ToLocation}`
+    });
+
+    res.json({ success: true });
+
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("STOCK TRANSFER ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 
       // =====================================================
       // ONLINE SIZE STOCK (INDEPENDENT, BLIND APPLY)
