@@ -1263,20 +1263,24 @@ app.post("/stock/transfer", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { UserName, FromLocation, ToLocation, Rows } = req.body;
-
-    if (
-      !UserName ||
-      !FromLocation ||
-      !ToLocation ||
-      FromLocation === ToLocation ||
-      !Array.isArray(Rows) ||
-      Rows.length === 0
-    ) {
-      return res.status(400).json({ error: "Invalid payload" });
-    }
-
+    ...
     await client.query("BEGIN");
+
+    // header insert
+    // row inserts
+
+    await client.query("COMMIT");   // ✅ THIS WAS MISSING
+
+    res.json({ success: true });
+  } catch (err) {
+    await client.query("ROLLBACK"); // ✅ IMPORTANT
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release(); // ✅ ABSOLUTELY REQUIRED
+  }
+});
+
 
     // ---------------------------------
     // HEADER
