@@ -1357,54 +1357,6 @@ app.post("/stock/transfer", async (req, res) => {
   }
 });
 
-
-      // =====================================================
-      // ONLINE SIZE STOCK (INDEPENDENT, BLIND APPLY)
-      // =====================================================
-      const jaipurInvolved =
-        FromLocation === "Jaipur" || ToLocation === "Jaipur";
-
-      if (jaipurInvolved && r.SizeQty && typeof r.SizeQty === "object") {
-        for (const [sizeCode, qty] of Object.entries(r.SizeQty)) {
-          let delta = 0;
-
-          if (FromLocation === "Jaipur") delta -= Number(qty);
-          if (ToLocation === "Jaipur") delta += Number(qty);
-
-          if (delta !== 0) {
-            await client.query(
-              `
-              UPDATE tbl_online_size_stock
-              SET qty = qty + $1
-              WHERE productid = $2 AND size_code = $3
-              `,
-              [delta, productId, sizeCode]
-            );
-          }
-        }
-      }
-    }
-
-    await client.query("COMMIT");
-
-    await logActivity({
-      username: UserName,
-      actionType: "STOCK_TRANSFER",
-      description: `${FromLocation} → ${ToLocation}`
-    });
-
-    res.json({ success: true });
-
-  } catch (e) {
-    await client.query("ROLLBACK");
-    console.error("STOCK TRANSFER ERROR:", e.message);
-    res.status(400).json({ error: e.message });
-  } finally {
-    client.release();
-  }
-});
-
-
 app.post("/admin/notify-app-update", async (req, res) => {
   try {
     await notifyAppUpdate();
