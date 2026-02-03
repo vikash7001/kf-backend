@@ -1523,6 +1523,32 @@ app.get("/incoming/:id", async (req, res) => {
   }
 });
 // ----------------------------------------------------------
+// IMAGES – FLAT PRODUCT LIST (ORDER IMAGES SCREEN)
+// ----------------------------------------------------------
+app.get("/images/products", async (_, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        p.productid              AS "ProductID",
+        p.item                   AS "Item",
+        p.seriesname             AS "SeriesName",
+        COALESCE(i.imageurl,'')  AS "ImageURL",
+        COALESCE(i.fabric,'')    AS "Fabric",
+        COALESCE(i.rate,'')      AS "Rate"
+      FROM tblproduct p
+      LEFT JOIN tblitemimages i
+        ON i.productid = p.productid
+      ORDER BY p.item
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("❌ /images/products error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ----------------------------------------------------------
 // STEP 5: VIEW SINGLE SALES VOUCHER (READ-ONLY)
 // ----------------------------------------------------------
 app.get("/sales/:id", async (req, res) => {
