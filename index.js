@@ -650,7 +650,6 @@ app.get("/images/category/:category", async (req, res) => {
   }
 });
 
-
 app.post("/images/series/list", async (req, res) => {
   try {
     const seriesList = req.body;
@@ -665,10 +664,13 @@ app.post("/images/series/list", async (req, res) => {
 
     const r = await pool.query(`
       SELECT
-        i.productid AS "ProductID",
-        COALESCE(i.imageurl,'n/a') AS "ImageURL"
-      FROM tblitemimages i
-      JOIN tblproduct p ON p.productid = i.productid
+        p.productid        AS "ProductID",
+        p.item             AS "Item",
+        p.fabric           AS "Fabric",
+        p.rate             AS "Rate",
+        COALESCE(i.imageurl, 'n/a') AS "ImageURL"
+      FROM tblproduct p
+      JOIN tblitemimages i ON i.productid = p.productid
       ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.seriesname = ANY($1)
       ${useStock ? `AND ${stockCondition}` : ""}
@@ -681,7 +683,6 @@ app.post("/images/series/list", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 
 app.post("/images/category/list", async (req, res) => {
   try {
@@ -697,10 +698,13 @@ app.post("/images/category/list", async (req, res) => {
 
     const r = await pool.query(`
       SELECT
-        i.productid AS "ProductID",
-        COALESCE(i.imageurl,'n/a') AS "ImageURL"
-      FROM tblitemimages i
-      JOIN tblproduct p ON p.productid = i.productid
+        p.productid        AS "ProductID",
+        p.item             AS "Item",
+        p.fabric           AS "Fabric",
+        p.rate             AS "Rate",
+        COALESCE(i.imageurl, 'n/a') AS "ImageURL"
+      FROM tblproduct p
+      JOIN tblitemimages i ON i.productid = p.productid
       ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.categoryname = ANY($1)
       ${useStock ? `AND ${stockCondition}` : ""}
