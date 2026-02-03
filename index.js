@@ -653,8 +653,10 @@ app.get("/images/category/:category", async (req, res) => {
 app.post("/images/series/list", async (req, res) => {
   try {
     const seriesList = req.body;
-    if (!Array.isArray(seriesList) || seriesList.length === 0)
+
+    if (!Array.isArray(seriesList) || seriesList.length === 0) {
       return res.json([]);
+    }
 
     const mode = req.query.mode || "either";
     const role = (req.user?.role || "customer").toLowerCase();
@@ -662,22 +664,26 @@ app.post("/images/series/list", async (req, res) => {
     const stockCondition = buildStockCondition(mode, role);
     const useStock = stockCondition !== null;
 
-    const r = await pool.query(`
+    const query = `
       SELECT
-        p.productid        AS "ProductID",
-        p.item             AS "Item",
-        p.fabric           AS "Fabric",
-        p.rate             AS "Rate",
-        COALESCE(i.imageurl, 'n/a') AS "ImageURL"
+        p.productid              AS "ProductID",
+        p.item                   AS "Item",
+        COALESCE(i.fabric, '')   AS "Fabric",
+        NULLIF(i.rate, '')::double precision AS "Rate",
+        COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
-      JOIN tblitemimages i ON i.productid = p.productid
+      LEFT JOIN tblitemimages i
+        ON i.productid = p.productid
       ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.seriesname = ANY($1)
       ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
-    `, [seriesList]);
+    `;
 
-    res.json(r.rows);
+    const result = await pool.query(query, [seriesList]);
+
+    res.json(result.rows);
+
   } catch (e) {
     console.error("MULTI-SERIES IMAGE ERROR:", e.message);
     res.status(500).json({ error: e.message });
@@ -687,8 +693,10 @@ app.post("/images/series/list", async (req, res) => {
 app.post("/images/category/list", async (req, res) => {
   try {
     const categoryList = req.body;
-    if (!Array.isArray(categoryList) || categoryList.length === 0)
+
+    if (!Array.isArray(categoryList) || categoryList.length === 0) {
       return res.json([]);
+    }
 
     const mode = req.query.mode || "either";
     const role = (req.user?.role || "customer").toLowerCase();
@@ -696,28 +704,31 @@ app.post("/images/category/list", async (req, res) => {
     const stockCondition = buildStockCondition(mode, role);
     const useStock = stockCondition !== null;
 
-    const r = await pool.query(`
+    const query = `
       SELECT
-        p.productid        AS "ProductID",
-        p.item             AS "Item",
-        p.fabric           AS "Fabric",
-        p.rate             AS "Rate",
-        COALESCE(i.imageurl, 'n/a') AS "ImageURL"
+        p.productid              AS "ProductID",
+        p.item                   AS "Item",
+        COALESCE(i.fabric, '')   AS "Fabric",
+        NULLIF(i.rate, '')::double precision AS "Rate",
+        COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
-      JOIN tblitemimages i ON i.productid = p.productid
+      LEFT JOIN tblitemimages i
+        ON i.productid = p.productid
       ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
       WHERE p.categoryname = ANY($1)
       ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
-    `, [categoryList]);
+    `;
 
-    res.json(r.rows);
+    const result = await pool.query(query, [categoryList]);
+
+    res.json(result.rows);
+
   } catch (e) {
     console.error("MULTI-CATEGORY IMAGE ERROR:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
-
 
 // ----------------------------------------------------------
 // STOCK  ❌ UNCHANGED
