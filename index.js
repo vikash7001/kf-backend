@@ -266,13 +266,38 @@ app.get("/series", async (_, res) => {
     const r = await pool.query(`
       SELECT
         seriesname   AS "SeriesName",
-        categoryname AS "CategoryName"
+        categoryname AS "CategoryName",
+        rate         AS "Rate"
       FROM tblseries
       WHERE isactive = true
       ORDER BY seriesname
     `);
     res.json(r.rows);
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put("/series/rate", async (req, res) => {
+  try {
+    const { SeriesName, Rate } = req.body;
+
+    if (!SeriesName) {
+      return res.status(400).json({ error: "SeriesName required" });
+    }
+
+    await pool.query(
+      `
+      UPDATE tblseries
+      SET rate = $1
+      WHERE seriesname = $2
+      `,
+      [Rate ?? null, SeriesName]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("SERIES RATE UPDATE ERROR:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
