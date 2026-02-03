@@ -564,14 +564,16 @@ app.post("/images/series/list-with-item", async (req, res) => {
   try {
     const seriesList = req.body;
 
+    console.log("🔥 SERIES LIST RECEIVED:", seriesList);
+
     if (!Array.isArray(seriesList) || seriesList.length === 0) {
       return res.status(400).json({ error: "Series list required" });
     }
 
     const result = await pool.query(`
       SELECT
-        p.productid            AS "ProductID",
-        p.item                 AS "Item",
+        p.productid             AS "ProductID",
+        p.item                  AS "Item",
         COALESCE(i.imageurl,'') AS "ImageURL",
         COALESCE(i.fabric,'')   AS "Fabric",
         COALESCE(i.rate,0)      AS "Rate"
@@ -582,6 +584,8 @@ app.post("/images/series/list-with-item", async (req, res) => {
       ORDER BY p.item
     `, [seriesList]);
 
+    console.log("✅ ROW COUNT:", result.rows.length);
+
     res.json(result.rows);
 
   } catch (e) {
@@ -589,7 +593,6 @@ app.post("/images/series/list-with-item", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 
 app.get("/images/series/:series", async (req, res) => {
   try {
