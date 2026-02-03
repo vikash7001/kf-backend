@@ -568,19 +568,19 @@ app.post("/images/series/list-with-item", async (req, res) => {
       return res.status(400).json({ error: "Series list required" });
     }
 
-    const result = await pool.query(
-      `
+    const result = await pool.query(`
       SELECT
-        p.productid AS "ProductID",
-        p.item       AS "Item",
-        i.imageurl   AS "ImageURL"
-      FROM tblitemimages i
-      JOIN tblproduct p
-        ON p.productid = i.productid
+        p.productid            AS "ProductID",
+        p.item                 AS "Item",
+        COALESCE(i.imageurl,'') AS "ImageURL",
+        COALESCE(i.fabric,'')   AS "Fabric",
+        COALESCE(i.rate,0)      AS "Rate"
+      FROM tblproduct p
+      LEFT JOIN tblitemimages i
+        ON i.productid = p.productid
       WHERE p.seriesname = ANY($1)
-      `,
-      [seriesList]
-    );
+      ORDER BY p.item
+    `, [seriesList]);
 
     res.json(result.rows);
 
@@ -589,6 +589,7 @@ app.post("/images/series/list-with-item", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 
 app.get("/images/series/:series", async (req, res) => {
   try {
