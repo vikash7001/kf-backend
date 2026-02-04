@@ -452,21 +452,22 @@ app.get("/images/list", async (_, res) => {
         P.productid              AS "ProductID",
         P.item                   AS "Item",
         COALESCE(I.fabric, '')   AS "Fabric",
-        I.rate                   AS "Rate",
+        COALESCE(S.rate, 0)      AS "Rate",
         COALESCE(I.imageurl, '') AS "ImageURL"
       FROM tblproduct P
       LEFT JOIN tblitemimages I
         ON I.productid = P.productid
+      LEFT JOIN tblseries S
+        ON S.seriesname = P.seriesname
       ORDER BY P.item
     `);
 
     res.json(r.rows);
   } catch (e) {
-    console.error("❌ /images/list error:", e);
+    console.error("❌ /images/list error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
-
 
 // ----------------------------------------------------------
 // IMAGE SAVE (OLD – ITEM BASED)  ✅ RESTORED
@@ -596,17 +597,20 @@ app.post("/images/series/list-with-item", async (req, res) => {
     }
 
     const result = await pool.query(`
-      SELECT
-        p.productid             AS "ProductID",
-        p.item                  AS "Item",
-        COALESCE(i.imageurl,'') AS "ImageURL",
-        COALESCE(i.fabric,'')   AS "Fabric",
-        COALESCE(i.rate,0)      AS "Rate"
-      FROM tblproduct p
-      LEFT JOIN tblitemimages i
-        ON i.productid = p.productid
-      WHERE p.seriesname = ANY($1)
-      ORDER BY p.item
+SELECT
+  p.productid             AS "ProductID",
+  p.item                  AS "Item",
+  COALESCE(i.imageurl,'') AS "ImageURL",
+  COALESCE(i.fabric,'')   AS "Fabric",
+  COALESCE(s.rate,0)      AS "Rate"
+FROM tblproduct p
+LEFT JOIN tblitemimages i
+  ON i.productid = p.productid
+LEFT JOIN tblseries s
+  ON s.seriesname = p.seriesname
+WHERE p.seriesname = ANY($1)
+ORDER BY p.item
+
     `, [seriesList]);
 
     console.log("✅ ROW COUNT:", result.rows.length);
@@ -694,12 +698,14 @@ app.post("/images/series/list", async (req, res) => {
         p.productid              AS "ProductID",
         p.item                   AS "Item",
         COALESCE(i.fabric, '')   AS "Fabric",
-        NULLIF(i.rate, '')::double precision AS "Rate",
+        s.rate                   AS "Rate",
         COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
       LEFT JOIN tblitemimages i
         ON i.productid = p.productid
-      ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
+      ${useStock ? "JOIN vwstocksummary s2 ON s2.productid = p.productid" : ""}
       WHERE p.seriesname = ANY($1)
       ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
@@ -734,7 +740,8 @@ app.post("/images/category/list", async (req, res) => {
         p.productid              AS "ProductID",
         p.item                   AS "Item",
         COALESCE(i.fabric, '')   AS "Fabric",
-        NULLIF(i.rate, '')::double precision AS "Rate",
+s.rate AS "Rate"
+
         COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
       LEFT JOIN tblitemimages i
@@ -1553,17 +1560,20 @@ app.get("/incoming/:id", async (req, res) => {
 app.get("/images/products", async (_, res) => {
   try {
     const r = await pool.query(`
-      SELECT
-        p.productid              AS "ProductID",
-        p.item                   AS "Item",
-        p.seriesname             AS "SeriesName",
-        COALESCE(i.imageurl,'')  AS "ImageURL",
-        COALESCE(i.fabric,'')    AS "Fabric",
-        COALESCE(i.rate,'')      AS "Rate"
-      FROM tblproduct p
-      LEFT JOIN tblitemimages i
-        ON i.productid = p.productid
-      ORDER BY p.item
+SELECT
+  p.productid              AS "ProductID",
+  p.item                   AS "Item",
+  p.seriesname             AS "SeriesName",
+  COALESCE(i.imageurl,'')  AS "ImageURL",
+  COALESCE(i.fabric,'')    AS "Fabric",
+  COALESCE(s.rate,0)       AS "Rate"
+FROM tblproduct p
+LEFT JOIN tblitemimages i
+  ON i.productid = p.productid
+LEFT JOIN tblseries s
+  ON s.seriesname = p.seriesname
+ORDER BY p.item
+
     `);
 
     res.json(r.rows);
