@@ -705,14 +705,13 @@ app.post("/images/series/list", async (req, res) => {
         ON i.productid = p.productid
       LEFT JOIN tblseries s
         ON s.seriesname = p.seriesname
-      ${useStock ? "JOIN vwstocksummary s2 ON s2.productid = p.productid" : ""}
+      ${useStock ? "JOIN vwstocksummary v ON v.productid = p.productid" : ""}
       WHERE p.seriesname = ANY($1)
       ${useStock ? `AND ${stockCondition}` : ""}
       ORDER BY p.item DESC
     `;
 
     const result = await pool.query(query, [seriesList]);
-
     res.json(result.rows);
 
   } catch (e) {
