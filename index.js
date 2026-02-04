@@ -693,7 +693,6 @@ app.post("/images/series/list", async (req, res) => {
     const stockCondition = buildStockCondition(mode, role);
     const useStock = stockCondition !== null;
 
-    const query = `
 const query = `
   SELECT
     p.productid              AS "ProductID",
@@ -706,13 +705,9 @@ const query = `
     ON i.productid = p.productid
   LEFT JOIN tblseries s
     ON s.seriesname = p.seriesname
-  ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
   WHERE p.seriesname = ANY($1)
-  ${useStock ? `AND ${stockCondition}` : ""}
   ORDER BY p.item DESC
 `;
-
-    `;
 
     const result = await pool.query(query, [seriesList]);
     res.json(result.rows);
