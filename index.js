@@ -446,22 +446,21 @@ app.post("/fcm/register", async (req, res) => {
 // IMAGES (MANAGE IMAGE PAGE)
 // ----------------------------------------------------------
 app.get("/images/list", async (_, res) => {
-  const r = await pool.query(`
-    SELECT
-      P.productid              AS "ProductID",
-      P.item                   AS "Item",
-      COALESCE(I.fabric, '')   AS "Fabric",
-      I.rate                   AS "Rate",
-      COALESCE(I.imageurl, '') AS "ImageURL"
-    FROM tblproduct P
-    LEFT JOIN tblitemimages I
-      ON I.productid = P.productid
-    ORDER BY P.item
-  `);
+  try {
+    const r = await pool.query(`
+      SELECT
+        P.productid              AS "ProductID",
+        P.item                   AS "Item",
+        COALESCE(I.fabric, '')   AS "Fabric",
+        I.rate                   AS "Rate",
+        COALESCE(I.imageurl, '') AS "ImageURL"
+      FROM tblproduct P
+      LEFT JOIN tblitemimages I
+        ON I.productid = P.productid
+      ORDER BY P.item
+    `);
 
-  res.json(r.rows);
-});
-
+    res.json(r.rows);
   } catch (e) {
     console.error("❌ /images/list error:", e);
     res.status(500).json({ error: e.message });
@@ -480,7 +479,7 @@ app.post("/image/save", async (req, res) => {
       return res.status(400).json({ error: "Item required" });
     }
 
-    console.log("🔥 IMAGE/SAVE CALLED", { Item, ImageURL, Fabric, Rate });
+    console.log("🔥 IMAGE/SAVE CALLED", { Item, ImageURL, Fabric});
 
     // 1️⃣ Find product
     const p = await pool.query(
@@ -506,7 +505,8 @@ DO UPDATE SET
   fabric   = EXCLUDED.fabric
 
       `,
-      [productId, ImageURL || '', Fabric || '', Rate || '']
+      [productId, ImageURL || '', Fabric || '']
+
     );
 
     // 3️⃣ Notify
