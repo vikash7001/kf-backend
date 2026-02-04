@@ -448,16 +448,19 @@ app.post("/fcm/register", async (req, res) => {
 app.get("/images/list", async (_, res) => {
   try {
     const r = await pool.query(`
-      SELECT
-        P.productid               AS "ProductID",
-        P.item                    AS "Item",
-        COALESCE(I.fabric, '')    AS "Fabric",
-        COALESCE(I.rate, '')      AS "Rate",
-        COALESCE(I.imageurl, '')  AS "ImageURL"
-      FROM tblproduct P
-      LEFT JOIN tblitemimages I
-        ON I.productid = P.productid
-      ORDER BY P.item
+SELECT
+  P.productid               AS "ProductID",
+  P.item                    AS "Item",
+  COALESCE(I.fabric, '')    AS "Fabric",
+  COALESCE(S.rate, '')      AS "Rate",
+  COALESCE(I.imageurl, '')  AS "ImageURL"
+FROM tblproduct P
+LEFT JOIN tblitemimages I
+  ON I.productid = P.productid
+LEFT JOIN tblseries S
+  ON S.seriesname = P.seriesname
+ORDER BY P.item
+
     `);
 
     res.json(r.rows);
@@ -474,7 +477,7 @@ app.get("/images/list", async (_, res) => {
 // ----------------------------------------------------------
 app.post("/image/save", async (req, res) => {
   try {
-    const { Item, ImageURL, Fabric, Rate } = req.body;
+    const { Item, ImageURL, Fabric } = req.body;
 
     if (!Item) {
       return res.status(400).json({ error: "Item required" });
@@ -498,13 +501,13 @@ app.post("/image/save", async (req, res) => {
     // 2️⃣ Insert / Update image + fabric + rate
     await pool.query(
       `
-      INSERT INTO tblitemimages (productid, imageurl, fabric, rate)
-      VALUES ($1,$2,$3,$4)
-      ON CONFLICT (productid)
-      DO UPDATE SET
-        imageurl = EXCLUDED.imageurl,
-        fabric   = EXCLUDED.fabric,
-        rate     = EXCLUDED.rate
+   INSERT INTO tblitemimages (productid, imageurl, fabric)
+VALUES ($1,$2,$3)
+ON CONFLICT (productid)
+DO UPDATE SET
+  imageurl = EXCLUDED.imageurl,
+  fabric   = EXCLUDED.fabric
+
       `,
       [productId, ImageURL || '', Fabric || '', Rate || '']
     );
