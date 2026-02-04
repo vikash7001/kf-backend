@@ -25,7 +25,7 @@ const SellingPartnerAPI = require("amazon-sp-api");
 // ----------------------------------------------------------
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.options("*", cors());
