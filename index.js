@@ -694,21 +694,24 @@ app.post("/images/series/list", async (req, res) => {
     const useStock = stockCondition !== null;
 
     const query = `
-      SELECT
-        p.productid              AS "ProductID",
-        p.item                   AS "Item",
-        COALESCE(i.fabric, '')   AS "Fabric",
-        s.rate                   AS "Rate",
-        COALESCE(i.imageurl, '') AS "ImageURL"
-      FROM tblproduct p
-      LEFT JOIN tblitemimages i
-        ON i.productid = p.productid
-      LEFT JOIN tblseries s
-        ON s.seriesname = p.seriesname
-      ${useStock ? "JOIN vwstocksummary v ON v.productid = p.productid" : ""}
-      WHERE p.seriesname = ANY($1)
-      ${useStock ? `AND ${stockCondition}` : ""}
-      ORDER BY p.item DESC
+const query = `
+  SELECT
+    p.productid              AS "ProductID",
+    p.item                   AS "Item",
+    COALESCE(i.fabric, '')   AS "Fabric",
+    s.rate                   AS "Rate",
+    COALESCE(i.imageurl, '') AS "ImageURL"
+  FROM tblproduct p
+  LEFT JOIN tblitemimages i
+    ON i.productid = p.productid
+  LEFT JOIN tblseries s
+    ON s.seriesname = p.seriesname
+  ${useStock ? "JOIN vwstocksummary s ON s.productid = p.productid" : ""}
+  WHERE p.seriesname = ANY($1)
+  ${useStock ? `AND ${stockCondition}` : ""}
+  ORDER BY p.item DESC
+`;
+
     `;
 
     const result = await pool.query(query, [seriesList]);
