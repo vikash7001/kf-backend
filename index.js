@@ -446,24 +446,21 @@ app.post("/fcm/register", async (req, res) => {
 // IMAGES (MANAGE IMAGE PAGE)
 // ----------------------------------------------------------
 app.get("/images/list", async (_, res) => {
-  try {
-    const r = await pool.query(`
-SELECT
-  P.productid               AS "ProductID",
-  P.item                    AS "Item",
-  COALESCE(I.fabric, '')    AS "Fabric",
-  COALESCE(S.rate, '')      AS "Rate",
-  COALESCE(I.imageurl, '')  AS "ImageURL"
-FROM tblproduct P
-LEFT JOIN tblitemimages I
-  ON I.productid = P.productid
-LEFT JOIN tblseries S
-  ON S.seriesname = P.seriesname
-ORDER BY P.item
+  const r = await pool.query(`
+    SELECT
+      P.productid              AS "ProductID",
+      P.item                   AS "Item",
+      COALESCE(I.fabric, '')   AS "Fabric",
+      I.rate                   AS "Rate",
+      COALESCE(I.imageurl, '') AS "ImageURL"
+    FROM tblproduct P
+    LEFT JOIN tblitemimages I
+      ON I.productid = P.productid
+    ORDER BY P.item
+  `);
 
-    `);
-
-    res.json(r.rows);
+  res.json(r.rows);
+});
 
   } catch (e) {
     console.error("❌ /images/list error:", e);
