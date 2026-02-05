@@ -692,11 +692,13 @@ app.post("/images/series/list", async (req, res) => {
         p.productid              AS "ProductID",
         p.item                   AS "Item",
         COALESCE(i.fabric, '')   AS "Fabric",
-        COALESCE(i.rate, 0)      AS "Rate",
+        COALESCE(s.rate, 0)      AS "Rate",
         COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
       LEFT JOIN tblitemimages i
         ON i.productid = p.productid
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
       JOIN vwstocksummary v
         ON v.productid = p.productid
       WHERE p.seriesname = ANY($1)
@@ -713,8 +715,6 @@ app.post("/images/series/list", async (req, res) => {
   }
 });
 
-
-
 app.post("/images/category/list", async (req, res) => {
   try {
     const categoryList = req.body;
@@ -728,11 +728,13 @@ app.post("/images/category/list", async (req, res) => {
         p.productid              AS "ProductID",
         p.item                   AS "Item",
         COALESCE(i.fabric, '')   AS "Fabric",
-        COALESCE(i.rate, 0)      AS "Rate",
+        COALESCE(s.rate, 0)      AS "Rate",
         COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
       LEFT JOIN tblitemimages i
         ON i.productid = p.productid
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
       JOIN vwstocksummary v
         ON v.productid = p.productid
       WHERE p.categoryname = ANY($1)
