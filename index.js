@@ -687,27 +687,22 @@ app.post("/images/series/list", async (req, res) => {
       return res.json([]);
     }
 
-    const mode = req.query.mode || "either";
-    const role = (req.user?.role || "customer").toLowerCase();
-
-    const stockCondition = buildStockCondition(mode, role);
-    const useStock = stockCondition !== null;
-
     const query = `
       SELECT
         p.productid              AS "ProductID",
         p.item                   AS "Item",
         COALESCE(i.fabric, '')   AS "Fabric",
-        COALESCE(sr.rate, 0)     AS "Rate",
+        COALESCE(s.rate, 0)      AS "Rate",
         COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
       LEFT JOIN tblitemimages i
         ON i.productid = p.productid
-      LEFT JOIN tblseries sr
-        ON sr.seriesname = p.seriesname
-      ${useStock ? "JOIN vwstocksummary v ON v.productid = p.productid" : ""}
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
+      JOIN vwstocksummary v
+        ON v.productid = p.productid
       WHERE p.seriesname = ANY($1)
-      ${useStock ? `AND ${stockCondition}` : ""}
+        AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
       ORDER BY p.item DESC
     `;
 
@@ -720,7 +715,6 @@ app.post("/images/series/list", async (req, res) => {
   }
 });
 
-
 app.post("/images/category/list", async (req, res) => {
   try {
     const categoryList = req.body;
@@ -729,27 +723,22 @@ app.post("/images/category/list", async (req, res) => {
       return res.json([]);
     }
 
-    const mode = req.query.mode || "either";
-    const role = (req.user?.role || "customer").toLowerCase();
-
-    const stockCondition = buildStockCondition(mode, role);
-    const useStock = stockCondition !== null;
-
     const query = `
       SELECT
         p.productid              AS "ProductID",
         p.item                   AS "Item",
         COALESCE(i.fabric, '')   AS "Fabric",
-        COALESCE(sr.rate, 0)     AS "Rate",
+        COALESCE(s.rate, 0)      AS "Rate",
         COALESCE(i.imageurl, '') AS "ImageURL"
       FROM tblproduct p
       LEFT JOIN tblitemimages i
         ON i.productid = p.productid
-      LEFT JOIN tblseries sr
-        ON sr.seriesname = p.seriesname
-      ${useStock ? "JOIN vwstocksummary v ON v.productid = p.productid" : ""}
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
+      JOIN vwstocksummary v
+        ON v.productid = p.productid
       WHERE p.categoryname = ANY($1)
-      ${useStock ? `AND ${stockCondition}` : ""}
+        AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
       ORDER BY p.item DESC
     `;
 
@@ -761,7 +750,6 @@ app.post("/images/category/list", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 
 // ----------------------------------------------------------
 // STOCK  ❌ UNCHANGED
