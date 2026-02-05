@@ -687,31 +687,24 @@ app.post("/images/series/list", async (req, res) => {
       return res.json([]);
     }
 
-    const mode = req.query.mode || "either";
-    const role = (req.user?.role || "customer").toLowerCase();
-
-    const stockCondition = buildStockCondition(mode, role);
-    const useStock = stockCondition !== null;
-
-const query = `
-  SELECT
-    p.productid              AS "ProductID",
-    p.item                   AS "Item",
-    COALESCE(i.fabric, '')   AS "Fabric",
-    s.rate                   AS "Rate",
-    COALESCE(i.imageurl, '') AS "ImageURL"
-  FROM tblproduct p
-  LEFT JOIN tblitemimages i
-    ON i.productid = p.productid
-  LEFT JOIN tblseries s
-    ON s.seriesname = p.seriesname
-  JOIN vwstocksummary v
-    ON v.productid = p.productid
-  WHERE p.seriesname = ANY($1)
-    AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
-  ORDER BY p.item DESC
-`;
-
+    const query = `
+      SELECT
+        p.productid               AS "ProductID",
+        p.item                    AS "Item",
+        COALESCE(i.fabric, '')    AS "Fabric",
+        COALESCE(s.rate, 0)       AS "Rate",
+        COALESCE(i.imageurl, '')  AS "ImageURL"
+      FROM tblproduct p
+      LEFT JOIN tblitemimages i
+        ON i.productid = p.productid
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
+      JOIN vwstocksummary v
+        ON v.productid = p.productid
+      WHERE p.seriesname = ANY($1)
+        AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
+      ORDER BY p.item DESC
+    `;
 
     const result = await pool.query(query, [seriesList]);
     res.json(result.rows);
@@ -722,6 +715,7 @@ const query = `
   }
 });
 
+
 app.post("/images/category/list", async (req, res) => {
   try {
     const categoryList = req.body;
@@ -730,35 +724,26 @@ app.post("/images/category/list", async (req, res) => {
       return res.json([]);
     }
 
-    const mode = req.query.mode || "either";
-    const role = (req.user?.role || "customer").toLowerCase();
-
-    const stockCondition = buildStockCondition(mode, role);
-    const useStock = stockCondition !== null;
-
-const query = `
-  SELECT
-    p.productid              AS "ProductID",
-    p.item                   AS "Item",
-    COALESCE(i.fabric, '')   AS "Fabric",
-    s.rate                   AS "Rate",
-    COALESCE(i.imageurl, '') AS "ImageURL"
-  FROM tblproduct p
-  LEFT JOIN tblitemimages i
-    ON i.productid = p.productid
-  LEFT JOIN tblseries s
-    ON s.seriesname = p.seriesname
-  JOIN vwstocksummary v
-    ON v.productid = p.productid
-  WHERE p.categoryname = ANY($1)
-    AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
-  ORDER BY p.item DESC
-`;
-
-
+    const query = `
+      SELECT
+        p.productid               AS "ProductID",
+        p.item                    AS "Item",
+        COALESCE(i.fabric, '')    AS "Fabric",
+        COALESCE(s.rate, 0)       AS "Rate",
+        COALESCE(i.imageurl, '')  AS "ImageURL"
+      FROM tblproduct p
+      LEFT JOIN tblitemimages i
+        ON i.productid = p.productid
+      LEFT JOIN tblseries s
+        ON s.seriesname = p.seriesname
+      JOIN vwstocksummary v
+        ON v.productid = p.productid
+      WHERE p.categoryname = ANY($1)
+        AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
+      ORDER BY p.item DESC
+    `;
 
     const result = await pool.query(query, [categoryList]);
-
     res.json(result.rows);
 
   } catch (e) {
@@ -766,6 +751,7 @@ const query = `
     res.status(500).json({ error: e.message });
   }
 });
+
 
 // ----------------------------------------------------------
 // STOCK  ❌ UNCHANGED
