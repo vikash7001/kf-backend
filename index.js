@@ -708,7 +708,7 @@ const query = `
   JOIN vwstocksummary v
     ON v.productid = p.productid
   WHERE p.seriesname = ANY($1)
-    AND (v.jaipurqty > 0 OR v.kolkataqty > 0)
+    AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
   ORDER BY p.item DESC
 `;
 
@@ -751,7 +751,7 @@ const query = `
   JOIN vwstocksummary v
     ON v.productid = p.productid
   WHERE p.categoryname = ANY($1)
-    AND (v.jaipurqty > 0 OR v.kolkataqty > 0)
+    AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
   ORDER BY p.item DESC
 `;
 
