@@ -705,9 +705,13 @@ const query = `
     ON i.productid = p.productid
   LEFT JOIN tblseries s
     ON s.seriesname = p.seriesname
+  JOIN vwstocksummary v
+    ON v.productid = p.productid
   WHERE p.seriesname = ANY($1)
+    AND (v.jaipurqty > 0 OR v.kolkataqty > 0)
   ORDER BY p.item DESC
 `;
+
 
     const result = await pool.query(query, [seriesList]);
     res.json(result.rows);
@@ -732,7 +736,7 @@ app.post("/images/category/list", async (req, res) => {
     const stockCondition = buildStockCondition(mode, role);
     const useStock = stockCondition !== null;
 
-    const query = `
+const query = `
   SELECT
     p.productid              AS "ProductID",
     p.item                   AS "Item",
@@ -744,9 +748,13 @@ app.post("/images/category/list", async (req, res) => {
     ON i.productid = p.productid
   LEFT JOIN tblseries s
     ON s.seriesname = p.seriesname
+  JOIN vwstocksummary v
+    ON v.productid = p.productid
   WHERE p.categoryname = ANY($1)
+    AND (v.jaipurqty > 0 OR v.kolkataqty > 0)
   ORDER BY p.item DESC
 `;
+
 
 
     const result = await pool.query(query, [categoryList]);
