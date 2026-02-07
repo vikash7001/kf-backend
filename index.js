@@ -1718,33 +1718,6 @@ app.get("/online/sku/:marketplace", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-app.get("/online/sku/pending/:marketplace", async (req, res) => {
-  try {
-    const marketplace = req.params.marketplace.toUpperCase();
-
-    const r = await pool.query(
-      `
-      SELECT
-        id,
-        marketplace,
-        sku_code,
-        asin,
-        name,
-        created_at
-      FROM tbl_online_sku_pending
-      WHERE marketplace = $1
-        AND (status IS NULL OR status = 'PENDING')
-      ORDER BY created_at
-      `,
-      [marketplace]
-    );
-
-    res.json(r.rows);
-  } catch (e) {
-    console.error("Load pending SKUs error:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
 app.post("/online/sku/confirm", async (req, res) => {
   const client = await pool.connect();
 
