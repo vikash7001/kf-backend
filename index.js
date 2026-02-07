@@ -46,7 +46,7 @@ app.use((req, res, next) => {
 function buildStockCondition(mode, role) {
   // Customers are always forced to "either"
   if (role === "customer") {
-    return `(s.jaipurqty > 5 OR s.kolkataqty > 5)`;
+    return `(s.jaipurqty > 5 OR s.kolkataqty > 5 OR s.ahmedabadqty > 5)`;
   }
 
   switch (mode) {
@@ -56,9 +56,12 @@ function buildStockCondition(mode, role) {
       return `s.jaipurqty > 5`;
     case "kolkata":
       return `s.kolkataqty > 5`;
+case "ahmedabad":
+  return `s.ahmedabadqty > 5`;
+
     case "either":
     default:
-      return `(s.jaipurqty > 5 OR s.kolkataqty > 5)`;
+      return `(s.jaipurqty > 5 OR s.kolkataqty > 5 OR s.ahmedabadqty > 5)`;
   }
 }
 async function isOnlineEnabled(productid) {
@@ -702,7 +705,12 @@ app.post("/images/series/list", async (req, res) => {
       JOIN vwstocksummary v
         ON v.productid = p.productid
       WHERE p.seriesname = ANY($1)
-        AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
+        AND (
+  v.jaipurqty > 3
+  OR v.kolkataqty > 3
+  OR v.ahmedabadqty > 3
+)
+
       ORDER BY p.item DESC
     `;
 
@@ -738,7 +746,12 @@ app.post("/images/category/list", async (req, res) => {
       JOIN vwstocksummary v
         ON v.productid = p.productid
       WHERE p.categoryname = ANY($1)
-        AND (v.jaipurqty > 3 OR v.kolkataqty > 3)
+AND (
+  v.jaipurqty > 3
+  OR v.kolkataqty > 3
+  OR v.ahmedabadqty > 3
+)
+
       ORDER BY p.item DESC
     `;
 
@@ -765,16 +778,17 @@ app.post("/stock", async (req, res) => {
     const roleKey = (role || "CUSTOMER").toUpperCase();
 
     const r = await pool.query(`
-      SELECT
-        productid AS "ProductID",
-        item AS "Item",
-        seriesname AS "SeriesName",
-        categoryname AS "CategoryName",
-        jaipurqty AS "JaipurQty",
-        kolkataqty AS "KolkataQty",
-        totalqty AS "TotalQty"
-      FROM vwstocksummary
-      ORDER BY item
+     SELECT
+  productid AS "ProductID",
+  item AS "Item",
+  seriesname AS "SeriesName",
+  categoryname AS "CategoryName",
+  jaipurqty AS "JaipurQty",
+  kolkataqty AS "KolkataQty",
+  ahmedabadqty AS "AhmedabadQty",
+  totalqty AS "TotalQty"
+FROM vwstocksummary
+ORDER BY item;
     `);
 
     // ❌ CUSTOMER → NO STOCK
