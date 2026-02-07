@@ -1718,6 +1718,109 @@ app.get("/online/sku/:marketplace", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.get("/online/sku/pending/:marketplace", async (req, res) => {
+  try {
+    const marketplace = req.params.marketplace.toUpperCase();
+
+    const r = await pool.query(
+      `
+      SELECT
+        id,
+        marketplace,
+        sku_code,
+        asin,
+        name,
+        created_at
+      FROM tbl_online_sku_pending
+      WHERE marketplace = $1
+        AND (status IS NULL OR status = 'PENDING')
+      ORDER BY created_at
+      `,
+      [marketplace]
+    );
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("Load pending SKUs error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.post("/online/sku/confirm", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const {
+      pending_id,
+      marketplace,
+      productid,
+      size_code
+    } = req.body;
+
+    if (!pending_id || !marketplace || !productid || !size_code) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    await client.query("BEGIN");
+
+    // 1️⃣ Load pending SKU
+    const p = await client.query(
+      `
+      SELECT sku_code
+      FROM tbl_online_sku_pending
+      WHERE id = $1
+        AND marketplace = $2
+        AND (status IS NULL OR status = 'PENDING')
+      `,
+      [pending_id, marketplace]
+    );
+
+    if (p.rows.length === 0) {
+      throw new Error("Pending SKU not found or already confirmed");
+    }
+
+    const skuCode = p.rows[0].sku_code;
+
+    // 2️⃣ Upsert into tbl_online_sku
+    await client.query(
+      `
+      INSERT INTO tbl_online_sku
+        (marketplace, productid, size_code, sku_code, is_active)
+      VALUES
+        ($1, $2, $3, $4, true)
+      ON CONFLICT (marketplace, productid, size_code)
+      DO UPDATE SET
+        sku_code = EXCLUDED.sku_code,
+        is_active = true,
+        updated_at = now()
+      `,
+      [marketplace, productid, size_code, skuCode]
+    );
+
+    // 3️⃣ Mark pending as CONFIRMED
+    await client.query(
+      `
+      UPDATE tbl_online_sku_pending
+      SET
+        status = 'CONFIRMED',
+        mapped_productid = $1,
+        mapped_size_code = $2,
+        updated_at = now()
+      WHERE id = $3
+      `,
+      [productid, size_code, pending_id]
+    );
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("Confirm SKU error:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
 
 // ----------------------------------------------------------
 // STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
