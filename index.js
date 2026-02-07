@@ -1629,6 +1629,96 @@ app.get("/sales/:id", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/online/sku", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const rows = req.body;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    await client.query("BEGIN");
+
+    for (const r of rows) {
+      const {
+        marketplace,
+        productid,
+        size_code,
+        sku_code
+      } = r;
+
+      if (!marketplace || !productid || !size_code) {
+        throw new Error("Missing required fields");
+      }
+
+      // If SKU is empty → deactivate mapping
+      if (!sku_code) {
+        await client.query(
+          `
+          UPDATE tbl_online_sku
+          SET is_active = false,
+              updated_at = now()
+          WHERE marketplace = $1
+            AND productid = $2
+            AND size_code = $3
+          `,
+          [marketplace, productid, size_code]
+        );
+        continue;
+      }
+
+      // Upsert SKU mapping
+      await client.query(
+        `
+        INSERT INTO tbl_online_sku
+          (marketplace, productid, size_code, sku_code, is_active)
+        VALUES
+          ($1, $2, $3, $4, true)
+        ON CONFLICT (marketplace, productid, size_code)
+        DO UPDATE SET
+          sku_code = EXCLUDED.sku_code,
+          is_active = true,
+          updated_at = now()
+        `,
+        [marketplace, productid, size_code, sku_code]
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("Online SKU error:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+app.get("/online/sku/:marketplace", async (req, res) => {
+  try {
+    const { marketplace } = req.params;
+
+    const r = await pool.query(
+      `
+      SELECT productid, size_code, sku_code
+      FROM tbl_online_sku
+      WHERE marketplace = $1
+        AND is_active = true
+      ORDER BY productid, size_code
+      `,
+      [marketplace.toUpperCase()]
+    );
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("Load SKU error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ----------------------------------------------------------
 // STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
 // ----------------------------------------------------------
