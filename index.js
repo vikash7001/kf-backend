@@ -1821,6 +1821,75 @@ app.post("/online/sku/confirm", async (req, res) => {
     client.release();
   }
 });
+app.get("/online/sku/pending/amazon", async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        id,
+        sku_code,
+        asin,
+        name,
+        status,
+        detected_at
+      FROM tbl_online_sku_pending
+      WHERE marketplace = 'AMAZON'
+      AND status = 'NEW'
+      ORDER BY detected_at DESC
+    `);
+
+    res.json(rows);
+  } catch (err) {
+    console.error("Pending Amazon SKU error:", err);
+    res.status(500).json({ error: "Failed to load pending SKUs" });
+  }
+});
+app.post("/online/sku/pending/amazon/approve", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const {
+      pending_id,
+      productid,
+      size_code,
+      sku_code
+    } = req.body;
+
+    if (!pending_id || !productid || !size_code || !sku_code) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    await client.query("BEGIN");
+
+    // 1️⃣ Insert into active SKU table
+    await client.query(`
+      INSERT INTO tbl_online_sku
+      (productid, size_code, marketplace, sku_code, is_active)
+      VALUES ($1, $2, 'AMAZON', $3, true)
+      ON CONFLICT DO NOTHING
+    `, [productid, size_code, sku_code]);
+
+    // 2️⃣ Mark pending as mapped
+    await client.query(`
+      UPDATE tbl_online_sku_pending
+      SET
+        status = 'MAPPED',
+        mapped_productid = $1,
+        mapped_size_code = $2,
+        updated_at = now()
+      WHERE id = $3
+    `, [productid, size_code, pending_id]);
+
+    await client.query("COMMIT");
+    res.json({ success: true });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Approve SKU error:", err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
 
 // ----------------------------------------------------------
 // STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
