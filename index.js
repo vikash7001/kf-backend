@@ -249,17 +249,25 @@ app.post("/signup", async (req, res) => {
 // PRODUCTS
 // ----------------------------------------------------------
 app.get("/products", async (_, res) => {
-  const r = await pool.query(`
-    SELECT
-      productid AS "ProductID",
-      item AS "Item",
-      seriesname AS "SeriesName",
-      categoryname AS "CategoryName"
-    FROM tblproduct
-    ORDER BY item
-  `);
-  res.json(r.rows);
+  try {
+    const r = await pool.query(`
+      SELECT
+        productid AS "ProductID",
+        item AS "Item",
+        seriesname AS "SeriesName",
+        categoryname AS "CategoryName",
+        origin AS "Origin"
+      FROM tblproduct
+      ORDER BY item
+    `);
+
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
 });
+
 
 // ----------------------------------------------------------
 // SERIES (RESTORED)
@@ -379,23 +387,25 @@ app.post("/series", async (req, res) => {
 });
 app.post("/products", async (req, res) => {
   try {
-    const { Item, SeriesName, CategoryName } = req.body;
-    if (!Item || !SeriesName || !CategoryName) {
-      return res.status(400).json({ error: "Item, SeriesName & CategoryName required" });
+    const { Item, SeriesName, CategoryName, Origin } = req.body;
+
+    if (!Item || !SeriesName || !CategoryName || !Origin) {
+      return res.status(400).json({ error: "All fields required" });
     }
 
-    await pool.query(
-      `INSERT INTO tblproduct (item, seriesname, categoryname)
-       VALUES ($1, $2, $3)`,
-      [Item.trim(), SeriesName.trim(), CategoryName.trim()]
-    );
+    await pool.query(`
+      INSERT INTO tblproduct (item, seriesname, categoryname, origin)
+      VALUES ($1, $2, $3, $4)
+    `, [Item, SeriesName, CategoryName, Origin]);
 
     res.json({ success: true });
-  } catch (e) {
-    console.error("PRODUCT POST ERROR:", e.message);
-    res.status(500).json({ error: e.message });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to save product" });
   }
 });
+
 
 app.post("/customers", async (req, res) => {
   try {
