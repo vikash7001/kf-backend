@@ -788,17 +788,18 @@ app.post("/stock", async (req, res) => {
     const roleKey = (role || "CUSTOMER").toUpperCase();
 
     const r = await pool.query(`
-     SELECT
-  productid AS "ProductID",
-  item AS "Item",
-  seriesname AS "SeriesName",
-  categoryname AS "CategoryName",
-  jaipurqty AS "JaipurQty",
-  kolkataqty AS "KolkataQty",
-  ahmedabadqty AS "AhmedabadQty",
-  totalqty AS "TotalQty"
-FROM vwstocksummary
-ORDER BY item;
+      SELECT
+        productid AS "ProductID",
+        item AS "Item",
+        seriesname AS "SeriesName",
+        categoryname AS "CategoryName",
+        origin AS "Origin",              -- ✅ ADDED
+        jaipurqty AS "JaipurQty",
+        kolkataqty AS "KolkataQty",
+        ahmedabadqty AS "AhmedabadQty",
+        totalqty AS "TotalQty"
+      FROM vwstocksummary
+      ORDER BY item;
     `);
 
     // ❌ CUSTOMER → NO STOCK
@@ -806,21 +807,20 @@ ORDER BY item;
       return res.json([]);
     }
 
-    // ✅ CUSTOMER_PREMIUM → AVAILABILITY ONLY
-if (roleKey === "CUSTOMER_PREMIUM") {
-console.log("STOCK RESPONSE SAMPLE:", r.rows[0]);
-  return res.json(
-    r.rows.map(s => ({
-      ProductID: s.ProductID,
-      Item: s.Item,
-      SeriesName: s.SeriesName,
-      CategoryName: s.CategoryName,
-      JaipurQty: Number(s.JaipurQty),
-      KolkataQty: Number(s.KolkataQty)
-    }))
-  );
-}
-
+    // ✅ CUSTOMER_PREMIUM → Availability Only
+    if (roleKey === "CUSTOMER_PREMIUM") {
+      return res.json(
+        r.rows.map(s => ({
+          ProductID: s.ProductID,
+          Item: s.Item,
+          SeriesName: s.SeriesName,
+          CategoryName: s.CategoryName,
+          Origin: s.Origin,               // ✅ INCLUDED
+          JaipurQty: Number(s.JaipurQty),
+          KolkataQty: Number(s.KolkataQty)
+        }))
+      );
+    }
 
     // ✅ ADMIN / USER → FULL STOCK
     return res.json(r.rows);
@@ -831,173 +831,6 @@ console.log("STOCK RESPONSE SAMPLE:", r.rows[0]);
   }
 });
 
-
-// GET ledger by product
-app.get("/stockledger/:itemCode", async (req, res) => {
-  try {
-    const { itemCode } = req.params;
-
-    const r = await pool.query(`
-      SELECT
-        ledgerid,
-        movementdate,
-        movementtype,
-        referenceid,
-        quantity,
-        locationname,
-        username
-      FROM tblstockledger
-      WHERE item = $1
-      ORDER BY movementdate
-    `, [itemCode]);
-
-    res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-app.post("/online/config", async (req, res) => {
-  const { productid, is_online, enabledSizes, sizeQty } = req.body;
-
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    // 1️⃣ Upsert online flag
-    await client.query(
-      `
-      insert into tbl_online_design (productid, is_online)
-      values ($1, $2)
-      on conflict (productid)
-      do update set
-        is_online = excluded.is_online,
-        updated_at = now()
-      `,
-      [productid, is_online]
-    );
-
-    // Clear previous sizes & stock
-    await client.query(
-      `delete from tbl_online_design_sizes where productid = $1`,
-      [productid]
-    );
-    await client.query(
-      `delete from tbl_online_size_stock where productid = $1`,
-      [productid]
-    );
-
-    // 2️⃣ Insert enabled sizes
-    if (is_online && Array.isArray(enabledSizes)) {
-      for (const sz of enabledSizes) {
-        await client.query(
-          `
-          insert into tbl_online_design_sizes (productid, size_code)
-          values ($1, $2)
-          `,
-          [productid, sz]
-        );
-      }
-    }
-
-    // 3️⃣ Insert size-wise stock (Jaipur only)
-    if (is_online && sizeQty) {
-      for (const [sz, qty] of Object.entries(sizeQty)) {
-        await client.query(
-          `
-          insert into tbl_online_size_stock (productid, size_code, qty)
-          values ($1, $2, $3)
-          `,
-          [productid, sz, qty]
-        );
-      }
-    }
-
-    await client.query("COMMIT");
-    res.json({ success: true });
-  } catch (e) {
-    await client.query("ROLLBACK");
-    console.error("ONLINE CONFIG SAVE ERROR:", e.message);
-    res.status(500).json({ error: e.message });
-  } finally {
-    client.release();
-  }
-});
-app.get("/online/sku/flipkart", async (req, res) => {
-  try {
-    const r = await pool.query(`
-      select productid, size_code, sku_code
-      from tbl_online_sku
-      where marketplace = 'FLIPKART'
-    `);
-
-    res.json(r.rows);
-  } catch (e) {
-    console.error("GET FLIPKART SKU ERROR:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-app.post("/online/sku/flipkart", async (req, res) => {
-  const rows = req.body; // array of { productid, size_code, sku_code }
-
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    for (const r of rows) {
-      await client.query(
-        `
-        insert into tbl_online_sku
-          (productid, size_code, marketplace, sku_code)
-        values ($1, $2, 'FLIPKART', $3)
-        on conflict (productid, size_code, marketplace)
-        do update set
-          sku_code = excluded.sku_code,
-          updated_at = now()
-        `,
-        [r.productid, r.size_code, r.sku_code || null]
-      );
-    }
-
-    await client.query("COMMIT");
-    res.json({ success: true });
-  } catch (e) {
-    await client.query("ROLLBACK");
-    console.error("SAVE FLIPKART SKU ERROR:", e.message);
-    res.status(500).json({ error: e.message });
-  } finally {
-    client.release();
-  }
-});
-app.get("/online/status-by-item/:item", async (req, res) => {
-  try {
-    const { item } = req.params;
-
-    const r = await pool.query(`
-      SELECT d.is_online, s.size_code
-      FROM tblproduct p
-      JOIN tbl_online_design d ON d.productid = p.productid
-      LEFT JOIN tbl_online_size_stock s ON s.productid = p.productid
-      WHERE p.item = $1
-    `, [item]);
-
-    if (r.rows.length === 0) {
-      return res.json({ is_online: false });
-    }
-
-    res.json({
-      is_online: r.rows[0].is_online === true,
-      sizes: r.rows
-        .filter(x => x.size_code)
-        .map(x => x.size_code)
-    });
-
-  } catch (e) {
-    console.error(e);
-    res.json({ is_online: false });
-  }
-});
 
 // ----------------------------------------------------------
 // INCOMING (PURCHASE)  ❌ UNCHANGED
