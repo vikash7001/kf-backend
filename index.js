@@ -7,7 +7,7 @@ const {
   notifyAppUpdate,
   notifyNewImage
 } = require("./notificationService");
-
+ 
 // ----------------------------------------------------------
 // KARNI FASHIONS BACKEND — PostgreSQL (Supabase)
 // ----------------------------------------------------------
