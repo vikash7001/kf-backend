@@ -1707,6 +1707,104 @@ app.post("/online/sku/pending/amazon/approve", async (req, res) => {
   }
 });
 
+
+app.post("/fabric/incoming", async (req, res) => {
+  try {
+    const {
+      entry_date,
+      vendor_id,
+      fabric_name,
+      lot_no,
+      quantity,
+      rate,
+      fold,
+      width,
+      location_id,
+      remarks
+    } = req.body;
+
+    await pool.query(`
+      INSERT INTO tblfabric_incoming
+      (entry_date, vendor_id, fabric_name, lot_no, quantity, rate, fold, width, location_id, remarks)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `, [
+      entry_date,
+      vendor_id,
+      fabric_name,
+      lot_no,
+      quantity,
+      rate || null,
+      fold || null,
+      width || null,
+      location_id,
+      remarks || null
+    ]);
+
+    res.json({ success: true });
+
+  } catch (e) {
+    console.error("FABRIC INCOMING ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+app.post("/fabric/movement", async (req, res) => {
+  try {
+    const {
+      lot_no,
+      design_number,
+      from_location_id,
+      jobworker_id,
+      uom,
+      qty_issued,
+      issue_date,
+      due_date,
+      remarks
+    } = req.body;
+
+    await pool.query(`
+      INSERT INTO tblfabric_movement
+      (lot_no, design_number, from_location_id, jobworker_id,
+       uom, qty_issued, issue_date, due_date, remarks)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `, [
+      lot_no,
+      design_number,
+      from_location_id,
+      jobworker_id,
+      uom,
+      qty_issued,
+      issue_date,
+      due_date || null,
+      remarks || null
+    ]);
+
+    res.json({ success: true });
+
+  } catch (e) {
+    console.error("FABRIC MOVEMENT ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+app.get("/fabric/dashboard/live", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT *
+      FROM vw_live_production
+      ORDER BY issue_date DESC
+    `);
+
+    res.json(r.rows);
+
+  } catch (e) {
+    console.error("FABRIC DASHBOARD ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ----------------------------------------------------------
 // STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
 // ----------------------------------------------------------
