@@ -1835,6 +1835,91 @@ app.get("/locations", async (req, res) => {
   }
 });
 
+
+app.get("/fabric/lots/available", async (req, res) => {
+  try {
+
+    const r = await pool.query(`
+      SELECT
+        fi.lot_no,
+        fi.fabric_name,
+        fi.quantity AS total_purchased,
+        COALESCE(SUM(fm.qty_issued), 0) AS total_issued,
+        fi.quantity - COALESCE(SUM(fm.qty_issued), 0) AS balance
+      FROM tblfabric_incoming fi
+      LEFT JOIN tblfabric_movement fm
+        ON fm.lot_no = fi.lot_no
+      GROUP BY fi.lot_no, fi.fabric_name, fi.quantity
+      HAVING fi.quantity - COALESCE(SUM(fm.qty_issued), 0) > 0
+      ORDER BY fi.lot_no
+    `);
+
+    res.json(r.rows);
+
+  } catch (e) {
+    console.error("AVAILABLE LOTS ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/jobworkers", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT jw.jobworker_id, jw.jobworker_name, p.process_name
+      FROM tbljobworker jw
+      JOIN tblprocess p ON p.process_id = jw.process_id
+      ORDER BY jw.jobworker_name
+    `);
+    res.json(r.rows);
+  } catch (e) {
+    console.error("JOBWORKERS ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+app.get("/fabric/dashboard/live", async (req, res) => {
+  try {
+
+    const r = await pool.query(`
+      SELECT
+        fi.lot_no,
+        fi.fabric_name,
+        v.vendor_name,
+        fi.quantity AS total_purchased,
+
+        COALESCE(SUM(fm.qty_issued) OVER (PARTITION BY fi.lot_no), 0) AS total_issued,
+        fi.quantity - COALESCE(SUM(fm.qty_issued) OVER (PARTITION BY fi.lot_no), 0) AS balance,
+
+        fm.design_number,
+        jw.jobworker_name,
+        p.process_name,
+        fm.issue_date,
+        fm.due_date,
+
+        CASE
+          WHEN fm.due_date IS NOT NULL AND fm.due_date < CURRENT_DATE THEN 'OVERDUE'
+          WHEN fm.lot_no IS NOT NULL THEN 'IN PROCESS'
+          ELSE 'AVAILABLE'
+        END AS status
+
+      FROM tblfabric_incoming fi
+      LEFT JOIN tblvendor v ON v.vendor_id = fi.vendor_id
+      LEFT JOIN tblfabric_movement fm ON fm.lot_no = fi.lot_no
+      LEFT JOIN tbljobworker jw ON jw.jobworker_id = fm.jobworker_id
+      LEFT JOIN tblprocess p ON p.process_id = jw.process_id
+
+      ORDER BY fi.lot_no, fm.issue_date DESC
+    `);
+
+    res.json(r.rows);
+
+  } catch (e) {
+    console.error("DASHBOARD ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ----------------------------------------------------------
 // STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
 // ----------------------------------------------------------
