@@ -1804,6 +1804,7 @@ app.get("/fabric/dashboard/live", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// GET Vendors
 app.get("/vendors", async (req, res) => {
   try {
     const r = await pool.query(`
@@ -1817,6 +1818,27 @@ app.get("/vendors", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// ADD Vendor
+app.post("/vendors", async (req, res) => {
+  try {
+    const { vendor_name } = req.body;
+
+    if (!vendor_name)
+      return res.status(400).json({ error: "Vendor name required" });
+
+    await pool.query(`
+      INSERT INTO tblvendor (vendor_name)
+      VALUES ($1)
+    `, [vendor_name]);
+
+    res.json({ success: true });
+
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 app.get("/locations", async (req, res) => {
   try {
@@ -1862,20 +1884,43 @@ app.get("/fabric/lots/available", async (req, res) => {
   }
 });
 
+// GET Job Workers
 app.get("/jobworkers", async (req, res) => {
   try {
     const r = await pool.query(`
-      SELECT jw.jobworker_id, jw.jobworker_name, p.process_name
+      SELECT jw.jobworker_id,
+             jw.jobworker_name,
+             p.process_name
       FROM tbljobworker jw
       JOIN tblprocess p ON p.process_id = jw.process_id
       ORDER BY jw.jobworker_name
     `);
     res.json(r.rows);
   } catch (e) {
-    console.error("JOBWORKERS ERROR:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
+
+// ADD Job Worker
+app.post("/jobworkers", async (req, res) => {
+  try {
+    const { jobworker_name, process_id } = req.body;
+
+    if (!jobworker_name || !process_id)
+      return res.status(400).json({ error: "Required fields missing" });
+
+    await pool.query(`
+      INSERT INTO tbljobworker (jobworker_name, process_id)
+      VALUES ($1,$2)
+    `, [jobworker_name, process_id]);
+
+    res.json({ success: true });
+
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 
 app.get("/fabric/dashboard/live", async (req, res) => {
@@ -1916,6 +1961,52 @@ app.get("/fabric/dashboard/live", async (req, res) => {
 
   } catch (e) {
     console.error("DASHBOARD ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+app.get("/fabric/incoming/list", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        fabric_incoming_id,
+        lot_no,
+        fabric_name,
+        quantity,
+        created_at
+      FROM tblfabric_incoming
+      ORDER BY fabric_incoming_id DESC
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("FABRIC INCOMING LIST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/fabric/movement/list", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        fm.fabric_movement_id,
+        fm.lot_no,
+        fi.fabric_name,
+        fm.design_number,
+        jw.jobworker_name,
+        p.process_name,
+        fm.qty_issued,
+        fm.issue_date,
+        fm.due_date
+      FROM tblfabric_movement fm
+      JOIN tblfabric_incoming fi ON fi.lot_no = fm.lot_no
+      JOIN tbljobworker jw ON jw.jobworker_id = fm.jobworker_id
+      JOIN tblprocess p ON p.process_id = jw.process_id
+      ORDER BY fm.fabric_movement_id DESC
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("FABRIC MOVEMENT LIST ERROR:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
