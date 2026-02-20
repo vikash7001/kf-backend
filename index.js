@@ -1804,6 +1804,36 @@ app.get("/fabric/dashboard/live", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.get("/vendors", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT vendor_id, vendor_name
+      FROM tblvendor
+      WHERE is_active = true
+      ORDER BY vendor_name
+    `);
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/locations", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT locationid, locationname
+      FROM tbllocation
+      WHERE isactive = true
+      ORDER BY locationname
+    `);
+
+    res.json(r.rows);
+
+  } catch (e) {
+    console.error("LOCATIONS ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ----------------------------------------------------------
 // STEP 6: VIEW SINGLE STOCK TRANSFER (READ-ONLY)
