@@ -1863,17 +1863,27 @@ app.get("/fabric/lots/available", async (req, res) => {
 
     const r = await pool.query(`
       SELECT
-        fi.lot_no,
-        fi.fabric_name,
-        fi.quantity AS total_purchased,
-        COALESCE(SUM(fm.qty_issued), 0) AS total_issued,
-        fi.quantity - COALESCE(SUM(fm.qty_issued), 0) AS balance
-      FROM tblfabric_incoming fi
-      LEFT JOIN tblfabric_movement fm
-        ON fm.lot_no = fi.lot_no
-      GROUP BY fi.lot_no, fi.fabric_name, fi.quantity
-      HAVING fi.quantity - COALESCE(SUM(fm.qty_issued), 0) > 0
-      ORDER BY fi.lot_no
+  fi.lot_no,
+  fi.fabric_name,
+  fi.quantity AS total_purchased,
+  COALESCE(SUM(fm.qty_issued), 0) AS total_issued,
+  fi.location_id,
+  l.locationname AS location_name,
+  fi.quantity - COALESCE(SUM(fm.qty_issued), 0) AS balance
+FROM tblfabric_incoming fi
+LEFT JOIN tblfabric_movement fm
+  ON fm.lot_no = fi.lot_no
+LEFT JOIN tbllocation l
+  ON l.locationid = fi.location_id
+GROUP BY
+  fi.lot_no,
+  fi.fabric_name,
+  fi.quantity,
+  fi.location_id,
+  l.locationname
+HAVING fi.quantity - COALESCE(SUM(fm.qty_issued), 0) > 0
+ORDER BY fi.lot_no
+
     `);
 
     res.json(r.rows);
