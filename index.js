@@ -1989,7 +1989,109 @@ app.get("/jobworkers", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/production/move-next", async (req, res) => {
+  const client = await pool.connect();
 
+  try {
+    const {
+      job_id,
+      to_jobworker_id,
+      quantity,
+      uom,
+      movement_date,
+      due_date,
+      jobworker_rate,
+      remarks,
+      convert_pcs
+    } = req.body;
+
+    if (!job_id || !to_jobworker_id || !quantity || !uom || !movement_date) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    await client.query("BEGIN");
+
+    // 1️⃣ Get current job
+    const jobResult = await client.query(
+      `SELECT * FROM tblproduction_job WHERE job_id = $1`,
+      [job_id]
+    );
+
+    if (!jobResult.rows.length) {
+      throw new Error("Job not found");
+    }
+
+    const job = jobResult.rows[0];
+
+    // 2️⃣ Get last movement
+    const lastMoveResult = await client.query(
+      `
+      SELECT *
+      FROM tblproduction_movement
+      WHERE job_id = $1
+      ORDER BY movement_id DESC
+      LIMIT 1
+      `,
+      [job_id]
+    );
+
+    const lastMove = lastMoveResult.rows[0];
+
+    const fromStage = lastMove.to_stage;
+    const fromWorker = lastMove.to_jobworker_id;
+
+    // 3️⃣ Handle conversion (only from STITCHING)
+    if (fromStage === "STITCHING" && !job.converted_pcs) {
+      if (!convert_pcs) {
+        throw new Error("Conversion required from STITCHING");
+      }
+
+      await client.query(
+        `UPDATE tblproduction_job SET converted_pcs = $1 WHERE job_id = $2`,
+        [convert_pcs, job_id]
+      );
+    }
+
+    // 4️⃣ Insert new movement
+    await client.query(
+      `
+      INSERT INTO tblproduction_movement
+      (job_id, from_stage, to_stage,
+       from_jobworker_id, to_jobworker_id,
+       uom, quantity, jobworker_rate,
+       movement_date, due_date, remarks)
+      VALUES
+      ($1,$2,'PROCESS',
+       $3,$4,
+       $5,$6,$7,
+       $8,$9,$10)
+      `,
+      [
+        job_id,
+        fromStage,
+        fromWorker,
+        to_jobworker_id,
+        uom,
+        quantity,
+        jobworker_rate || null,
+        movement_date,
+        due_date || null,
+        remarks || null
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ success: true });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
 // ADD Job Worker
 app.post("/jobworkers", async (req, res) => {
   try {
