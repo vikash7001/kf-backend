@@ -1893,7 +1893,86 @@ ORDER BY fi.lot_no
     res.status(500).json({ error: e.message });
   }
 });
+app.post("/production/create-job", async (req, res) => {
+  const client = await pool.connect();
 
+  try {
+    const {
+      lot_no,
+      design_number,
+      initial_mtr,
+      to_jobworker_id,
+      movement_date,
+      due_date,
+      jobworker_rate,
+      remarks
+    } = req.body;
+
+    if (
+      !lot_no ||
+      !design_number ||
+      !initial_mtr ||
+      !to_jobworker_id ||
+      !movement_date
+    ) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    await client.query("BEGIN");
+
+    // 1️⃣ Create production job
+    const jobResult = await client.query(
+      `
+      INSERT INTO tblproduction_job
+      (lot_no, design_number, initial_mtr)
+      VALUES ($1,$2,$3)
+      RETURNING job_id
+      `,
+      [lot_no, design_number, initial_mtr]
+    );
+
+    const jobId = jobResult.rows[0].job_id;
+
+    // 2️⃣ Create first movement (Factory → First Worker)
+    await client.query(
+      `
+      INSERT INTO tblproduction_movement
+      (job_id, from_stage, to_stage,
+       from_jobworker_id, to_jobworker_id,
+       uom, quantity, jobworker_rate,
+       movement_date, due_date, remarks)
+      VALUES
+      ($1,'FACTORY','PROCESS',
+       NULL,$2,
+       'MTR',$3,$4,
+       $5,$6,$7)
+      `,
+      [
+        jobId,
+        to_jobworker_id,
+        initial_mtr,
+        jobworker_rate || null,
+        movement_date,
+        due_date || null,
+        remarks || null
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      job_id: jobId
+    });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: "Failed to create production job" });
+  } finally {
+    client.release();
+  }
+});
 // GET Job Workers
 app.get("/jobworkers", async (req, res) => {
   try {
