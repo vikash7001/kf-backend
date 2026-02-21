@@ -2053,45 +2053,45 @@ app.post("/production/move-next", async (req, res) => {
     }
 
     // 4️⃣ Insert new movement
-    await client.query(
-      `
-      INSERT INTO tblproduction_movement
-      (job_id, from_stage, to_stage,
-       from_jobworker_id, to_jobworker_id,
-       uom, quantity, jobworker_rate,
-       movement_date, due_date, remarks)
-      VALUES
-      ($1,$2,'PROCESS',
-       $3,$4,
-       $5,$6,$7,
-       $8,$9,$10)
-      `,
-      [
-        job_id,
-        fromStage,
-        fromWorker,
-        to_jobworker_id,
-        uom,
-        quantity,
-        jobworker_rate || null,
-        movement_date,
-        due_date || null,
-        remarks || null
-      ]
-    );
+const isReturningToFactory = to_jobworker_id === 0; // 0 means factory return (we define this)
 
-    await client.query("COMMIT");
+await client.query(
+  `
+  INSERT INTO tblproduction_movement
+  (job_id, from_stage, to_stage,
+   from_jobworker_id, to_jobworker_id,
+   uom, quantity, jobworker_rate,
+   movement_date, due_date, remarks)
+  VALUES
+  ($1,$2,$3,
+   $4,$5,
+   $6,$7,$8,
+   $9,$10,$11)
+  `,
+  [
+    job_id,
+    fromStage,
+    isReturningToFactory ? "FACTORY" : "PROCESS",
+    fromWorker,
+    isReturningToFactory ? null : to_jobworker_id,
+    uom,
+    quantity,
+    jobworker_rate || null,
+    movement_date,
+    due_date || null,
+    remarks || null
+  ]
+);
 
-    res.json({ success: true });
+// If returning to factory → mark completed
+if (isReturningToFactory) {
+  await client.query(
+    `UPDATE tblproduction_job SET status = 'COMPLETED' WHERE job_id = $1`,
+    [job_id]
+  );
+}
 
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
+
 // ADD Job Worker
 app.post("/jobworkers", async (req, res) => {
   try {
@@ -2127,7 +2127,57 @@ app.get("/processes", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+app.get("/production/dashboard", async (req, res) => {
+  try {
 
+    const result = await pool.query(`
+      SELECT
+        j.job_id,
+        j.lot_no,
+        j.design_number,
+        j.initial_mtr,
+        j.converted_pcs,
+        j.status,
+
+        m.to_stage AS current_stage,
+        m.to_jobworker_id,
+        jw.jobworker_name,
+        p.process_name,
+
+        m.due_date,
+
+        CASE
+          WHEN j.status = 'COMPLETED' THEN 'COMPLETED'
+          WHEN m.due_date < CURRENT_DATE THEN 'OVERDUE'
+          ELSE 'IN_PROCESS'
+        END AS live_status
+
+      FROM tblproduction_job j
+
+      JOIN LATERAL (
+        SELECT *
+        FROM tblproduction_movement
+        WHERE job_id = j.job_id
+        ORDER BY movement_id DESC
+        LIMIT 1
+      ) m ON true
+
+      LEFT JOIN tbljobworker jw
+        ON jw.jobworker_id = m.to_jobworker_id
+
+      LEFT JOIN tblprocess p
+        ON p.process_id = jw.process_id
+
+      ORDER BY j.job_id DESC
+    `);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load production dashboard" });
+  }
+});
 // ADD Process
 app.post("/processes", async (req, res) => {
   try {
@@ -2189,6 +2239,51 @@ app.get("/fabric/dashboard/live", async (req, res) => {
   } catch (e) {
     console.error("DASHBOARD ERROR:", e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+app.get("/production/history/:job_id", async (req, res) => {
+  try {
+    const { job_id } = req.params;
+
+    const result = await pool.query(`
+      SELECT
+        m.movement_id,
+        m.from_stage,
+        m.to_stage,
+        m.uom,
+        m.quantity,
+        m.jobworker_rate,
+        m.movement_date,
+        m.due_date,
+        m.remarks,
+
+        fw.jobworker_name AS from_worker,
+        tw.jobworker_name AS to_worker,
+        p.process_name
+
+      FROM tblproduction_movement m
+
+      LEFT JOIN tbljobworker fw
+        ON fw.jobworker_id = m.from_jobworker_id
+
+      LEFT JOIN tbljobworker tw
+        ON tw.jobworker_id = m.to_jobworker_id
+
+      LEFT JOIN tbljobworker jw
+        ON jw.jobworker_id = m.to_jobworker_id
+
+      LEFT JOIN tblprocess p
+        ON p.process_id = jw.process_id
+
+      WHERE m.job_id = $1
+      ORDER BY m.movement_id ASC
+    `, [job_id]);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load job history" });
   }
 });
 app.get("/fabric/incoming/list", async (req, res) => {
