@@ -1921,6 +1921,42 @@ app.post("/jobworkers", async (req, res) => {
   }
 });
 
+// GET Processes
+app.get("/processes", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT process_id, process_name
+      FROM tblprocess
+      ORDER BY process_name
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error("PROCESS GET ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ADD Process
+app.post("/processes", async (req, res) => {
+  try {
+    const { process_name } = req.body;
+
+    if (!process_name)
+      return res.status(400).json({ error: "Process name required" });
+
+    await pool.query(`
+      INSERT INTO tblprocess (process_name)
+      VALUES ($1)
+    `, [process_name]);
+
+    res.json({ success: true });
+
+  } catch (e) {
+    console.error("PROCESS POST ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 
 app.get("/fabric/dashboard/live", async (req, res) => {
