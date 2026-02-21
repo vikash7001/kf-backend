@@ -1789,21 +1789,7 @@ app.post("/fabric/movement", async (req, res) => {
 });
 
 
-app.get("/fabric/dashboard/live", async (req, res) => {
-  try {
-    const r = await pool.query(`
-      SELECT *
-      FROM vw_live_production
-      ORDER BY issue_date DESC
-    `);
 
-    res.json(r.rows);
-
-  } catch (e) {
-    console.error("FABRIC DASHBOARD ERROR:", e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
 // GET Vendors
 app.get("/vendors", async (req, res) => {
   try {
@@ -1989,6 +1975,9 @@ app.get("/jobworkers", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+// ----------------------------------------------------------
+// PRODUCTION – MOVE TO NEXT STAGE
+// ----------------------------------------------------------
 app.post("/production/move-next", async (req, res) => {
   const client = await pool.connect();
 
@@ -2005,7 +1994,7 @@ app.post("/production/move-next", async (req, res) => {
       convert_pcs
     } = req.body;
 
-    if (!job_id || !to_jobworker_id || !quantity || !uom || !movement_date) {
+    if (!job_id || quantity == null || !uom || !movement_date) {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
@@ -2035,8 +2024,11 @@ app.post("/production/move-next", async (req, res) => {
       [job_id]
     );
 
-    const lastMove = lastMoveResult.rows[0];
+    if (!lastMoveResult.rows.length) {
+      throw new Error("No previous movement found");
+    }
 
+    const lastMove = lastMoveResult.rows[0];
     const fromStage = lastMove.to_stage;
     const fromWorker = lastMove.to_jobworker_id;
 
@@ -2053,75 +2045,101 @@ app.post("/production/move-next", async (req, res) => {
     }
 
     // 4️⃣ Insert new movement
-const isReturningToFactory = to_jobworker_id === 0; // 0 means factory return (we define this)
+    const isReturningToFactory = Number(to_jobworker_id) === 0;
 
-await client.query(
-  `
-  INSERT INTO tblproduction_movement
-  (job_id, from_stage, to_stage,
-   from_jobworker_id, to_jobworker_id,
-   uom, quantity, jobworker_rate,
-   movement_date, due_date, remarks)
-  VALUES
-  ($1,$2,$3,
-   $4,$5,
-   $6,$7,$8,
-   $9,$10,$11)
-  `,
-  [
-    job_id,
-    fromStage,
-    isReturningToFactory ? "FACTORY" : "PROCESS",
-    fromWorker,
-    isReturningToFactory ? null : to_jobworker_id,
-    uom,
-    quantity,
-    jobworker_rate || null,
-    movement_date,
-    due_date || null,
-    remarks || null
-  ]
-);
+    await client.query(
+      `
+      INSERT INTO tblproduction_movement
+      (job_id, from_stage, to_stage,
+       from_jobworker_id, to_jobworker_id,
+       uom, quantity, jobworker_rate,
+       movement_date, due_date, remarks)
+      VALUES
+      ($1,$2,$3,
+       $4,$5,
+       $6,$7,$8,
+       $9,$10,$11)
+      `,
+      [
+        job_id,
+        fromStage,
+        isReturningToFactory ? "FACTORY" : "PROCESS",
+        fromWorker,
+        isReturningToFactory ? null : to_jobworker_id,
+        uom,
+        quantity,
+        jobworker_rate || null,
+        movement_date,
+        due_date || null,
+        remarks || null
+      ]
+    );
 
-// If returning to factory → mark completed
-if (isReturningToFactory) {
-  await client.query(
-    `UPDATE tblproduction_job SET status = 'COMPLETED' WHERE job_id = $1`,
-    [job_id]
-  );
-}
+    // 5️⃣ Mark completed if returned to factory
+    if (isReturningToFactory) {
+      await client.query(
+        `UPDATE tblproduction_job SET status = 'COMPLETED' WHERE job_id = $1`,
+        [job_id]
+      );
+    }
 
-
-// ADD Job Worker
-app.post("/jobworkers", async (req, res) => {
-  try {
-    const { jobworker_name, process_id } = req.body;
-
-    if (!jobworker_name || !process_id)
-      return res.status(400).json({ error: "Required fields missing" });
-
-    await pool.query(`
-      INSERT INTO tbljobworker (jobworker_name, process_id)
-      VALUES ($1,$2)
-    `, [jobworker_name, process_id]);
+    await client.query("COMMIT");
 
     res.json({ success: true });
 
   } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("MOVE NEXT ERROR:", e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+
+// ----------------------------------------------------------
+// ADD JOB WORKER
+// ----------------------------------------------------------
+app.post("/jobworkers", async (req, res) => {
+  try {
+    const { jobworker_name, process_id } = req.body;
+
+    if (!jobworker_name || !process_id) {
+      return res.status(400).json({ error: "Required fields missing" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO tbljobworker (jobworker_name, process_id)
+      VALUES ($1,$2)
+      `,
+      [jobworker_name, process_id]
+    );
+
+    res.json({ success: true });
+
+  } catch (e) {
+    console.error("ADD JOBWORKER ERROR:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// GET Processes
+
+// ----------------------------------------------------------
+// GET PROCESSES
+// ----------------------------------------------------------
 app.get("/processes", async (req, res) => {
   try {
-    const r = await pool.query(`
+    const r = await pool.query(
+      `
       SELECT process_id, process_name
       FROM tblprocess
       ORDER BY process_name
-    `);
+      `
+    );
 
     res.json(r.rows);
+
   } catch (e) {
     console.error("PROCESS GET ERROR:", e.message);
     res.status(500).json({ error: e.message });
