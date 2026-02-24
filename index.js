@@ -1343,7 +1343,10 @@ app.get("/stock/transfer/list", async (req, res) => {
         COALESCE(SUM(l.quantity), 0) AS "TotalQty"
       FROM tblstocktransferheader h
       LEFT JOIN tblstockledger l
-        ON l.referenceid = h.transferid
+        ON (
+             l.referenceid = h.transferid::text
+          OR l.referenceid = 'T' || h.transferid::text
+           )
        AND l.movementtype = 'Incoming'
       GROUP BY
         h.transferid,
