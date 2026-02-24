@@ -1179,7 +1179,7 @@ app.post("/stock/transfer", async (req, res) => {
     );
 
     const transferId = h.rows[0].transferid;
-
+    const refId = `T${transferId}`;
     // ROWS
     for (const r of Rows) {
       const p = await client.query(
@@ -1205,7 +1205,7 @@ app.post("/stock/transfer", async (req, res) => {
         VALUES ('OUT',$1,$2,$3,$4,$5,$6,$7)
         `,
         [
-          transferId,
+          refId,
           r.Item,
           r.SeriesName,
           r.CategoryName,
@@ -1224,7 +1224,7 @@ app.post("/stock/transfer", async (req, res) => {
         VALUES ('Incoming',$1,$2,$3,$4,$5,$6,$7)
         `,
         [
-          transferId,
+          refId,
           r.Item,
           r.SeriesName,
           r.CategoryName,
@@ -2358,8 +2358,9 @@ app.get("/stock/transfer/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Header
-    const header = await pool.query(`
+    // 1️⃣ Header (always numeric ID)
+    const header = await pool.query(
+      `
       SELECT
         transferid,
         fromlocation,
@@ -2368,13 +2369,16 @@ app.get("/stock/transfer/:id", async (req, res) => {
         createdon
       FROM tblstocktransferheader
       WHERE transferid = $1
-    `, [id]);
+      `,
+      [id]
+    );
 
     if (header.rows.length === 0)
       return res.status(404).json({ error: "Not found" });
 
-    // Rows (ledger entries)
-    const rows = await pool.query(`
+    // 2️⃣ Ledger rows (support OLD + NEW referenceid format)
+    const rows = await pool.query(
+      `
       SELECT
         item,
         seriesname,
@@ -2384,8 +2388,11 @@ app.get("/stock/transfer/:id", async (req, res) => {
         movementtype
       FROM tblstockledger
       WHERE referenceid = $1
+         OR referenceid = 'T' || $1
       ORDER BY ledgerid
-    `, [id]);
+      `,
+      [id]
+    );
 
     res.json({
       header: header.rows[0],
