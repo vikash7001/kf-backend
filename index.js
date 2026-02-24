@@ -2359,8 +2359,14 @@ app.get("/stock/transfer/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1️⃣ Header (numeric ID from header table)
-    const header = await pool.query(
+    // Force numeric safety for header lookup
+    const transferId = Number(id);
+    if (isNaN(transferId)) {
+      return res.status(400).json({ error: "Invalid transfer ID" });
+    }
+
+    // 1️⃣ Fetch Header
+    const headerResult = await pool.query(
       `
       SELECT
         transferid,
@@ -2371,14 +2377,15 @@ app.get("/stock/transfer/:id", async (req, res) => {
       FROM tblstocktransferheader
       WHERE transferid = $1
       `,
-      [id]
+      [transferId]
     );
 
-    if (header.rows.length === 0)
-      return res.status(404).json({ error: "Not found" });
+    if (headerResult.rows.length === 0) {
+      return res.status(404).json({ error: "Transfer not found" });
+    }
 
-    // 2️⃣ Ledger rows (ONLY T-prefixed reference)
-    const rows = await pool.query(
+    // 2️⃣ Fetch Ledger Rows (STRICTLY T-prefixed only)
+    const rowsResult = await pool.query(
       `
       SELECT
         item,
@@ -2391,12 +2398,12 @@ app.get("/stock/transfer/:id", async (req, res) => {
       WHERE referenceid = 'T' || $1::text
       ORDER BY ledgerid
       `,
-      [id]
+      [transferId]
     );
 
     res.json({
-      header: header.rows[0],
-      rows: rows.rows
+      header: headerResult.rows[0],
+      rows: rowsResult.rows
     });
 
   } catch (e) {
