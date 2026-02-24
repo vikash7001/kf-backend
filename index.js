@@ -1343,10 +1343,7 @@ app.get("/stock/transfer/list", async (req, res) => {
         COALESCE(SUM(l.quantity), 0) AS "TotalQty"
       FROM tblstocktransferheader h
       LEFT JOIN tblstockledger l
-        ON (
-             l.referenceid = h.transferid::text
-          OR l.referenceid = 'T' || h.transferid::text
-           )
+        ON l.referenceid = 'T' || h.transferid::text
        AND l.movementtype = 'Incoming'
       GROUP BY
         h.transferid,
@@ -1357,6 +1354,7 @@ app.get("/stock/transfer/list", async (req, res) => {
     `);
 
     res.json(r.rows);
+
   } catch (e) {
     console.error("TRANSFER LIST ERROR:", e.message);
     res.status(500).json({ error: e.message });
@@ -2361,7 +2359,7 @@ app.get("/stock/transfer/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1️⃣ Header (always numeric ID)
+    // 1️⃣ Header (numeric ID from header table)
     const header = await pool.query(
       `
       SELECT
@@ -2379,7 +2377,7 @@ app.get("/stock/transfer/:id", async (req, res) => {
     if (header.rows.length === 0)
       return res.status(404).json({ error: "Not found" });
 
-    // 2️⃣ Ledger rows (support OLD + NEW referenceid format)
+    // 2️⃣ Ledger rows (ONLY T-prefixed reference)
     const rows = await pool.query(
       `
       SELECT
@@ -2390,8 +2388,7 @@ app.get("/stock/transfer/:id", async (req, res) => {
         locationname,
         movementtype
       FROM tblstockledger
-      WHERE referenceid = $1
-         OR referenceid = 'T' || $1
+      WHERE referenceid = 'T' || $1::text
       ORDER BY ledgerid
       `,
       [id]
